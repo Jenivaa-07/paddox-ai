@@ -100,15 +100,30 @@ def health_check():
     return {"status": "ok", "service": "paddox-ai"}
 
 @app.get("/ready")
-def ready_check():
+def ready_check(response: Response):
+    deps = {
+        "torch": HAS_TORCH,
+        "transformers": HAS_TRANSFORMERS,
+        "fastf1": HAS_FASTF1
+    }
+    
+    race_ready = race_predictor_svc.model is not None if hasattr(race_predictor_svc, 'model') else False
+    fantasy_ready = fantasy_predictor_svc.pipeline is not None if hasattr(fantasy_predictor_svc, 'pipeline') else False
+    
+    # Do not treat the smoke-test sentiment model as production-critical
+    is_ready = race_ready and fantasy_ready
+    
+    if not is_ready:
+        response.status_code = 503
+        
     return {
-        "status": "ready",
-        "dependencies": {
-            "torch": HAS_TORCH,
-            "transformers": HAS_TRANSFORMERS,
-            "fastf1": HAS_FASTF1
-        },
-        "models_loaded": bool(models)
+        "status": "ready" if is_ready else "unavailable",
+        "dependencies": deps,
+        "models_loaded": {
+            "race": race_ready,
+            "fantasy": fantasy_ready,
+            "sentiment": "sentiment" in models
+        }
     }
 
 # --- RAG & Voice ---

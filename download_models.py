@@ -1,7 +1,6 @@
 import os
 import hashlib
 import sys
-import json
 import logging
 import urllib.request
 import shutil
@@ -11,14 +10,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 EXPECTED_ARTIFACTS = {
-    "artifacts/predictive/lstm_race/run_22f2c2a7/model.pt": None,
-    "artifacts/predictive/rf_fantasy/run_d6aa63ac/model.joblib": os.environ.get("EXPECTED_RF_SHA256"),
-    "artifacts/sentiment/run_4025bd5a_1785255656/model.safetensors": None,
+    "artifacts/predictive/lstm_race/run_22f2c2a7/model.pt": os.environ.get("EXPECTED_LSTM_SHA256"),
+    "artifacts/predictive/rf_fantasy/run_d6aa63ac/model.joblib": os.environ.get("EXPECTED_RF_SHA256")
 }
 
 def verify_checksum(filepath, expected_hash):
     if not expected_hash:
-        return True
+        return False
     sha256 = hashlib.sha256()
     with open(filepath, "rb") as f:
         for chunk in iter(lambda: f.read(4096), b""):
@@ -27,15 +25,30 @@ def verify_checksum(filepath, expected_hash):
 
 def download_and_verify():
     missing = False
+    
+    bucket = os.environ.get("ARTIFACT_BUCKET_URL")
+    if not bucket:
+        logger.error("ARTIFACT_BUCKET_URL is not set.")
+        sys.exit(1)
+        
+    is_test = os.environ.get("PYTEST_CURRENT_TEST") is not None or os.environ.get("TEST_ENV") == "true"
+    
+    parsed_bucket = urlparse(bucket)
+    if parsed_bucket.scheme != "https":
+        if parsed_bucket.scheme == "file" and is_test:
+            logger.info("Allowing file:// scheme for local testing.")
+        else:
+            logger.error(f"Invalid ARTIFACT_BUCKET_URL scheme: {parsed_bucket.scheme}. Only HTTPS is permitted in production.")
+            sys.exit(1)
+    
     for path, expected_hash in EXPECTED_ARTIFACTS.items():
+        if not expected_hash:
+            logger.error(f"Missing required expected SHA-256 hash for {path}")
+            missing = True
+            continue
+            
         if not os.path.exists(path):
             logger.info(f"Artifact {path} missing. Attempting download from external storage...")
-            bucket = os.environ.get("ARTIFACT_BUCKET_URL")
-            if not bucket:
-                logger.error(f"Cannot download {path}: ARTIFACT_BUCKET_URL is not set.")
-                missing = True
-                continue
-            
             filename = os.path.basename(path)
             source_url = f"{bucket}/{filename}"
             logger.info(f"Downloading {path} from {source_url}...")
