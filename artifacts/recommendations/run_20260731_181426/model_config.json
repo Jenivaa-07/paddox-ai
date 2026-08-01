@@ -1,0 +1,15 @@
+{
+    "embedding_dim": 64,
+    "learning_rate": 0.001,
+    "epochs": 10,
+    "batch_size": 64,
+    "weight_decay": "1e-5",
+    "margin": 0.2,
+    "loss": "bpr",
+    "weights": {
+        "collaborative": 0.6,
+        "content": 0.2,
+        "popularity": 0.1,
+        "preference": 0.1
+    }
+}

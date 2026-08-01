@@ -1,0 +1,9 @@
+allowed_sources:
+  - "paddox_internal"
+  - "licensed_partner"
+  - "explicit_permission"
+prohibited_sources:
+  - "youtube_rip"
+  - "unauthorized_broadcast"
+  - "social_media_rip"
+max_age_days: 90

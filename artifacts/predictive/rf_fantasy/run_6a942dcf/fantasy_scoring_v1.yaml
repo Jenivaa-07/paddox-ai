@@ -1,0 +1,42 @@
+name: PADDOX_FANTASY_V1
+description: Explicitly PADDOX-defined scoring system, not official F1 Fantasy scoring.
+
+qualifying_points:
+  1: 10
+  2: 9
+  3: 8
+  4: 7
+  5: 6
+  6: 5
+  7: 4
+  8: 3
+  9: 2
+  10: 1
+
+race_points:
+  1: 25
+  2: 18
+  3: 15
+  4: 12
+  5: 10
+  6: 8
+  7: 6
+  8: 4
+  9: 2
+  10: 1
+
+sprint_points:
+  1: 8
+  2: 7
+  3: 6
+  4: 5
+  5: 4
+  6: 3
+  7: 2
+  8: 1
+
+modifiers:
+  position_gained: 1
+  fastest_lap: 5
+  dnf: -10
+  dsq: -15

@@ -1,0 +1,21 @@
+{
+    "schema_version": "2.1",
+    "status": "fetch_complete",
+    "completed_timestamp": "2026-08-01T09:16:09.308884",
+    "race_weekends": {
+        "requested": 103,
+        "successfully_fetched": 103,
+        "source": "full_fetch_progress.json completed_events count (authoritative)"
+    },
+    "sessions": {
+        "required_successfully_fetched": 206,
+        "optional_successfully_fetched": 47,
+        "unavailable": 0
+    },
+    "seasons_covered": [2022, 2023, 2024, 2025, 2026],
+    "unavailable_session_details": [],
+    "model_training_gate": "OPEN",
+    "integrity_validation_required_before_training": true,
+    "note": "Session discovery used actual FastF1 event schedule (Session1-Session5) rather than hard-coded identifiers. 2023 Sprint Shootout sessions are requested using the FastF1 schedule name 'Sprint Shootout'. 2024+ Sprint Qualifying requested as 'Sprint Qualifying'. A race weekend is marked complete only when all required sessions (Race, Qualifying) are present. The race_weekends.successfully_fetched count is derived from full_fetch_progress.json completed_events (103), which is the authoritative record.",
+    "supersedes": "SUPERSEDED_INVALID manifest created 2026-07-31T16:33:53Z"
+}

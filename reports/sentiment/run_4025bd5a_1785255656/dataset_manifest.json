@@ -1,0 +1,12 @@
+{
+    "run_id": "run_4025bd5a_1785255656",
+    "run_type": "smoke_test",
+    "dataset_type": "synthetic_test_fixture",
+    "eligible_for_paper": false,
+    "eligible_for_production": false,
+    "model_description": "PADDOX motorsport-domain-adapted DistilBERT sentiment classifier",
+    "timestamp": 1785255666.205449,
+    "train_rows": 10,
+    "val_rows": 10,
+    "test_rows": 10
+}

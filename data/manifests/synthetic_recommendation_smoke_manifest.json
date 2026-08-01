@@ -1,0 +1,10 @@
+{
+    "dataset_type": "synthetic_test_fixture",
+    "synthetic_mode": true,
+    "eligible_for_paper": false,
+    "eligible_for_production": false,
+    "sha256_hashes": {
+        "synthetic_interactions.csv": "6474cc0ee2dd1b5d31912273be5596d83416842478097a1adbac290117937d3c",
+        "synthetic_users.csv": "0707f08e10643d2756c5fe7ff7ccf8b45ce97ad2141ca55489ef607948193487"
+    }
+}

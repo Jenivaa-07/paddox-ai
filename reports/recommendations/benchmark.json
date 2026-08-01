@@ -1,0 +1,14 @@
+{
+    "warm_up_count": 50,
+    "measured_call_count": 500,
+    "p50_latency_ms": 2.3501,
+    "p95_latency_ms": 3.9446,
+    "mean_latency_ms": 2.5532,
+    "stddev_ms": 0.6332,
+    "environment": {
+        "os": "Windows",
+        "machine": "AMD64",
+        "cpu_count": 16
+    },
+    "raw_sample_path": "reports/recommendations/latency_samples.csv"
+}

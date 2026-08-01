@@ -1,0 +1,7 @@
+{
+    "total_candidates": 50,
+    "valid_candidates": 9,
+    "filtered_for_rights": 41,
+    "rights_compliance_rate": 1.0,
+    "Precision@K_pending": true
+}

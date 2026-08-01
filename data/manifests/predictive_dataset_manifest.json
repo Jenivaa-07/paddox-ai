@@ -1,0 +1,33 @@
+{
+    "source": "FastF1 API (Ergast/Jolpica via FOM data)",
+    "source_url": "https://github.com/theOehrly/Fast-F1",
+    "collection_timestamp": "2026-08-01T09:22:51.570120",
+    "seasons_and_races": "Chronological split from 2022-2024 (subset limits apply)",
+    "preprocessing_steps": [
+        "Dropped null laps",
+        "Shifted rolling windows to prevent leakage",
+        "Padding up to 10 timesteps"
+    ],
+    "random_seed": 42,
+    "files": {
+        "train": {
+            "race_seq_rows": 1092,
+            "fantasy_rows": 280,
+            "race_seq_hash": "4bf093faaf604977f764b832c6261ba7ef0c528813974314941057b81fd06780",
+            "fantasy_hash": "1310689793763403ade6b9f00e5fd63c9e0c43ddbd1e97bdc9f0c624445960cd"
+        },
+        "val": {
+            "race_seq_rows": 232,
+            "fantasy_rows": 60,
+            "race_seq_hash": "4f365a1733779c04282cc7d684034687f2d451da2f795e018087fb337337f850",
+            "fantasy_hash": "8497a18b4ac1544e0065df59407db4e7cc38ed8e7b9fa282153b3a54b68ef724"
+        },
+        "test": {
+            "race_seq_rows": 316,
+            "fantasy_rows": 80,
+            "race_seq_hash": "ecdd390f39feaf12254a7f78ae40ff63897be37e4e65b15306acf5e6a104ea3e",
+            "fantasy_hash": "494ba700e9c4ed59e368ac6a9d6a57d0f166f284ec8201e5e2c9cb951b8a0c46"
+        }
+    },
+    "leakage_checks": "PASSED"
+}

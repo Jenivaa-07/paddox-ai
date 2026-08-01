@@ -1,0 +1,10 @@
+{
+    "authorized_accepted": 7,
+    "prohibited_rejected": 1,
+    "expired_rejected": 3,
+    "missing_rights_rejected": 40,
+    "duplicate_suppressed": 1,
+    "false_acceptance_count": 0,
+    "false_rejection_count": 0,
+    "compliance_note": "100% rights-policy accuracy on the labelled synthetic smoke-test fixture"
+}

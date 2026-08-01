@@ -1,0 +1,36 @@
+.venv/
+__pycache__/
+*.pyc
+
+# Data & Models
+data/raw/*
+data/cache/*
+data/processed/*
+!data/**/.gitkeep
+models/**/*.pkl
+models/**/*.pt
+models/**/*.h5
+
+# Env
+.env
+
+artifacts/predictive/**/*.pt
+artifacts/predictive/**/*.pkl
+*.log
+*.csv
+
+*.joblib
+*.h5
+*.safetensors
+
+mock_s3/
+artifacts/**/*.joblib
+artifacts/**/*.safetensors
+artifacts/**/*.h5
+artifacts/**/*.pt
+artifacts/**/*.pkl
+
+*.log
+*.txt
+!requirements*.txt
+tree.txt

@@ -1,0 +1,10 @@
+{
+    "numeric_features": [
+        "qualifying_position",
+        "rolling_avg_finish"
+    ],
+    "categorical_features": [
+        "constructor_id"
+    ],
+    "description": "Tabular features for Random Forest Fantasy Predictor"
+}

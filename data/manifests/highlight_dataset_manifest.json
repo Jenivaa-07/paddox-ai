@@ -1,0 +1,10 @@
+{
+    "source_collections": [
+        "synthetic_mock_highlights"
+    ],
+    "extraction_timestamp": "2026-07-31T18:48:10.529239",
+    "total_candidates": 52,
+    "synthetic_mode": true,
+    "eligible_for_paper": false,
+    "eligible_for_production": false
+}

@@ -1,0 +1,17 @@
+{
+    "dataset_type": "real_observed_interactions",
+    "synthetic_mode": false,
+    "eligible_for_pilot_analysis": true,
+    "eligible_for_final_deep_model_evaluation": false,
+    "source_collections": [
+        "users",
+        "orders",
+        "wishlists",
+        "reviews",
+        "fanpoints"
+    ],
+    "extraction_timestamp": "2026-07-31T18:36:14.351269",
+    "privacy_transformations": "HMAC-SHA256 for user IDs. Names, emails, passwords, addresses excluded.",
+    "genuine_event_count": 0,
+    "sparsity": 1.0
+}

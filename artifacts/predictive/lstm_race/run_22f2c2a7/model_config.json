@@ -1,0 +1,11 @@
+{
+    "input_dim": 3,
+    "hidden_dim": 64,
+    "num_layers": 2,
+    "lap_time_unit": "milliseconds",
+    "lap_time_scale": 100000.0,
+    "scaled_range_expected": [
+        0.0,
+        2.0
+    ]
+}

@@ -1,0 +1,18 @@
+{
+    "eval_loss": 1.063689947128296,
+    "eval_accuracy": 0.7,
+    "eval_macro_f1": 0.6757575757575758,
+    "eval_precision_NEGATIVE": 1.0,
+    "eval_recall_NEGATIVE": 0.3333333333333333,
+    "eval_f1_NEGATIVE": 0.5,
+    "eval_precision_NEUTRAL": 0.5714285714285714,
+    "eval_recall_NEUTRAL": 1.0,
+    "eval_f1_NEUTRAL": 0.7272727272727273,
+    "eval_precision_POSITIVE": 1.0,
+    "eval_recall_POSITIVE": 0.6666666666666666,
+    "eval_f1_POSITIVE": 0.8,
+    "eval_runtime": 0.445,
+    "eval_samples_per_second": 22.474,
+    "eval_steps_per_second": 11.237,
+    "epoch": 1.0
+}

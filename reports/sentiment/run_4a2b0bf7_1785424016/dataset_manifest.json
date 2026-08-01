@@ -1,0 +1,12 @@
+{
+    "run_id": "run_4a2b0bf7_1785424016",
+    "run_type": "smoke_test",
+    "dataset_type": "synthetic_test_fixture",
+    "eligible_for_paper": false,
+    "eligible_for_production": false,
+    "model_description": "PADDOX smoke-test DistilBERT sentiment classifier",
+    "timestamp": 1785424026.31311,
+    "train_rows": 10,
+    "val_rows": 10,
+    "test_rows": 10
+}

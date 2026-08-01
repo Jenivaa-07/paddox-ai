@@ -1,0 +1,16 @@
+{
+    "features": [
+        "grid_position",
+        "rolling_avg_finish"
+    ],
+    "input_format": "sequence_length_10",
+    "description": "Left-padded 10-timestep sequence of [lap_time_ms, grid_position, rolling_avg_finish]",
+    "scaling": {
+        "lap_time_unit": "milliseconds",
+        "lap_time_scale": 100000.0,
+        "scaled_range_expected": [
+            0.0,
+            2.0
+        ]
+    }
+}

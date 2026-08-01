@@ -1,0 +1,31 @@
+{
+    "source_collections": [
+        "synthetic_mock"
+    ],
+    "extraction_timestamp": "2026-07-31T17:51:33.146051",
+    "unique_pseudonymous_users": 20,
+    "unique_items": 133,
+    "interaction_counts": 327,
+    "event_distribution": {
+        "wishlist": 78,
+        "highlight_view": 67,
+        "purchase": 67,
+        "product_view": 58,
+        "content_view": 57
+    },
+    "date_range": {
+        "start": "2026-07-31T17:51:33.061532",
+        "end": "2026-07-31T17:51:33.066054"
+    },
+    "sparsity": 0.8770676691729323,
+    "missing_fields": 0,
+    "excluded_records": "Bots, Admin accounts, Cancelled Orders",
+    "sha256_hashes": {
+        "interactions.csv": "fd44464bc030efe6148db200a2be0fc28746f20c214ca626576242471c8cf86c",
+        "users.csv": "5099926bcc5d6bf1d9fdb708d680c87d69f9e2de4fecf698cfd1ceb6ca7d950a"
+    },
+    "privacy_transformations": "Salted SHA-256 for user IDs. Names, emails, passwords, addresses excluded.",
+    "synthetic_mode": true,
+    "eligible_for_paper": false,
+    "eligible_for_production": false
+}

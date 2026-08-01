@@ -1,0 +1,24 @@
+{
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "vector_dimension": 384,
+    "similarity_metric": "cosine",
+    "normalize_embeddings": true,
+    "chunk_size": 500,
+    "chunk_overlap": 50,
+    "document_count": 10,
+    "chunk_count": 17,
+    "source_hashes": {
+        "f1_terminology.md": "1fb54ce0486e5d387af91dce625f52907db13114ed42dacb5161112bd5a40d6c",
+        "fia_regulations.md": "1d5ee7e7f4df40e0bced98d1ac991279eb68feffc5622144c25fea39597259b8",
+        "historical_data.md": "55432ddd7e280f7d2fdefd953ec3a2c225c69314fcf4bbe35a73d3214b9e7afc",
+        "paddox_faq.md": "6c710f27a42122c076f1c55904a08ecad27f7c7eb128000450dd2120d2f4b5b8",
+        "paddox_shop_policy.md": "8762be643405f39344eb1d1e103b75c1100f616cd23ea7e520f6589b51c1f8ca",
+        "source_0.md": "822eaa4e7a7ba8ab98bfa59376500edfb3edc2d2243a7aef515e1b79c42aa511",
+        "source_1.md": "a3529f685f87b005741ea780bcbad8d6ab2009b133e7503399ac975c1f2047d0",
+        "source_2.md": "5b07754f148ae68d841c4e688472787f50a2b792ddcbe4787e7bbfa981944785",
+        "source_3.md": "1446655251af729d32f717e7af4c2703b92c4fc417e6828440f0cddaae3a8565",
+        "source_4.md": "052abe97a98aa028eccdef296f53d65a6e9b545bb89b56fa5cd69e3819e02b4e"
+    },
+    "creation_timestamp": 1785424203.1960485,
+    "index_version": "v2"
+}

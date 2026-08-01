@@ -1,0 +1,46 @@
+{
+    "race_model": {
+        "p50": 0.4908,
+        "p95": 0.629125,
+        "mean": 0.509869,
+        "std": 0.05780741422170689,
+        "min": 0.4421,
+        "max": 0.7498,
+        "measurements": 100
+    },
+    "fant_model": {
+        "p50": 11.2883,
+        "p95": 14.039480000000001,
+        "mean": 11.561390999999999,
+        "std": 1.152322757572287,
+        "min": 10.2892,
+        "max": 16.8021,
+        "measurements": 100
+    },
+    "race_api": {
+        "p50": 172.93095,
+        "p95": 359.73618,
+        "mean": 196.25591400000002,
+        "std": 81.95238129235541,
+        "min": 156.7033,
+        "max": 749.8974,
+        "measurements": 100
+    },
+    "fant_api": {
+        "p50": 171.8952,
+        "p95": 367.54443,
+        "mean": 198.78280400000003,
+        "std": 95.32261813219979,
+        "min": 155.8354,
+        "max": 921.5324,
+        "measurements": 100
+    },
+    "environment": {
+        "os": "Windows",
+        "cpu": "Intel64 Family 6 Model 186 Stepping 2, GenuineIntel",
+        "ram_gb": 23.64,
+        "python_version": "3.12.10",
+        "pytorch_version": "2.13.0+cpu",
+        "cuda_available": false
+    }
+}

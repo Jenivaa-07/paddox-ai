@@ -1,0 +1,19 @@
+{
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "vector_dimension": 384,
+    "similarity_metric": "cosine",
+    "normalize_embeddings": true,
+    "chunk_size": 500,
+    "chunk_overlap": 50,
+    "document_count": 5,
+    "chunk_count": 5,
+    "source_hashes": {
+        "source_0.md": "f0fccfbe899d0f5bd51150e3366f28ee793a2e0812e2822c2a94d00959707b90",
+        "source_1.md": "376fe67725d702d8c97111342f6d7f5604138eb0c51874ae9d18d875e4a64386",
+        "source_2.md": "96cf54e8bdfa6d6635cdef443fc883a9e7a5a434cce510e5a60e3b8389549be3",
+        "source_3.md": "98e45baaf2f839f298b74a61e0605bcdd79f6ef3aceabb4d69b6da30f3949bbd",
+        "source_4.md": "6bb65c259999c742ff1c194ac1e4f7a4c912070f4f8b0ec32aae5a286e960421"
+    },
+    "creation_timestamp": 1785420376.185393,
+    "index_version": "v1"
+}

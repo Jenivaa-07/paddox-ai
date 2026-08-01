@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: paddox-ai
+    env: docker
+    plan: standard
+    healthCheckPath: /health
+    envVars:
+      - key: ARTIFACT_BUCKET_URL
+        sync: false
+      - key: EXPECTED_RF_SHA256
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
