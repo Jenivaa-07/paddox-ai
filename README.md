@@ -11,10 +11,14 @@ This repository hosts the AI backend for PADDOX, providing advanced machine lear
 ## Setup
 Install dependencies:
 ```bash
-pip install -r requirements-lock.txt
+pip install -r requirements.txt
 ```
 
 Run locally:
 ```bash
 python -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
+
+## Environment
+- Remote HTTPS Artifact Bootstrap Status: PENDING
+
