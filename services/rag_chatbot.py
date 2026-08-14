@@ -33,6 +33,12 @@ INJECTION_PATTERNS = (
     r"jailbreak",
 )
 
+FOLLOW_UP_PATTERN = re.compile(
+    r"^(and\b|also\b|what about\b|how about\b|tell me more\b|why\b|when\b|where\b|"
+    r"who\b|which one\b|can you explain\b)|\b(it|that|this|they|them|those)\b",
+    flags=re.IGNORECASE,
+)
+
 
 def _embedding_model():
     from langchain_huggingface import HuggingFaceEmbeddings
@@ -147,6 +153,14 @@ def _source_from_metadata(metadata):
     }
 
 
+def _default_suggestions():
+    return [
+        "When is the next Formula 1 race?",
+        "Who leads the driver standings?",
+        "What can I do on PADDOX?",
+    ]
+
+
 def _refusal(answer, request_id, reason):
     return {
         "status": "success",
@@ -161,6 +175,7 @@ def _refusal(answer, request_id, reason):
         "data_as_of": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "request_id": request_id,
         "refusal_reason": reason,
+        "suggestions": _default_suggestions(),
         "retrieval": {
             "index_version": _active_index_version,
             "chunks_used": 0,
@@ -172,7 +187,69 @@ def _looks_like_prompt_injection(query):
     return any(re.search(pattern, query, flags=re.IGNORECASE) for pattern in INJECTION_PATTERNS)
 
 
-def generate_rag_response(query: str, live_context: dict = None) -> dict:
+def _normalise_history(history):
+    turns = []
+    for turn in list(history or [])[-8:]:
+        if not isinstance(turn, dict) or turn.get("role") not in {"user", "assistant"}:
+            continue
+        content = re.sub(r"\s+", " ", str(turn.get("content", ""))).strip()[:1000]
+        if not content or _looks_like_prompt_injection(content):
+            continue
+        turns.append({"role": turn["role"], "content": content})
+    return turns
+
+
+def _retrieval_query(query, history):
+    if not history or not FOLLOW_UP_PATTERN.search(query):
+        return query
+    previous_user_turn = next(
+        (turn["content"] for turn in reversed(history) if turn["role"] == "user"),
+        "",
+    )
+    return f"{previous_user_turn}\nFollow-up: {query}" if previous_user_turn else query
+
+
+def _context_content(value, max_length):
+    if not isinstance(value, dict) or not value:
+        return ""
+    return json.dumps(value, ensure_ascii=False, default=str)[:max_length]
+
+
+def _follow_up_suggestions(sources, live_context=None, user_context=None):
+    source_ids = {source.get("source") for source in sources}
+    if live_context or "live_f1_context" in source_ids:
+        return [
+            "When is qualifying?",
+            "Who leads the driver standings?",
+            "Who won the last race?",
+        ]
+    if user_context and user_context.get("signedIn"):
+        return [
+            "How many Fan Points do I have?",
+            "What can I do in Fan Pulse?",
+            "When is the next Formula 1 race?",
+        ]
+    if "paddox_shop_policy.md" in source_ids:
+        return [
+            "Which items cannot be returned?",
+            "How long does shipping take?",
+            "What can I do on PADDOX?",
+        ]
+    if "f1_terminology.md" in source_ids or "fia_regulations.md" in source_ids:
+        return [
+            "What is an overcut?",
+            "Explain dirty air",
+            "What changed in the 2026 power units?",
+        ]
+    return _default_suggestions()
+
+
+def generate_rag_response(
+    query: str,
+    history: list = None,
+    live_context: dict = None,
+    user_context: dict = None,
+) -> dict:
     request_id = str(uuid.uuid4())
     clean_query = str(query or "").strip()
 
@@ -190,6 +267,8 @@ def generate_rag_response(query: str, live_context: dict = None) -> dict:
         )
 
     try:
+        clean_history = _normalise_history(history)
+        search_query = _retrieval_query(clean_query, clean_history)
         vectorstore = load_vectorstore()
         documents = []
         if vectorstore:
@@ -198,7 +277,7 @@ def generate_rag_response(query: str, live_context: dict = None) -> dict:
                 search_type="similarity_score_threshold",
                 search_kwargs={"k": 4, "score_threshold": threshold},
             )
-            documents = retriever.invoke(clean_query)
+            documents = retriever.invoke(search_query)
 
         context_docs = []
         sources = []
@@ -211,13 +290,27 @@ def generate_rag_response(query: str, live_context: dict = None) -> dict:
                 seen_sources.add(source["source"])
                 sources.append(source)
 
-        # live_context is only for trusted in-process callers such as voice routing.
-        if live_context:
+        # These contexts are accepted only from the authenticated Node gateway.
+        live_content = _context_content(live_context, 8000)
+        if live_content:
             context_docs.append({
-                "content": json.dumps(live_context, ensure_ascii=False),
+                "content": live_content,
                 "metadata": {
-                    "source": "live_context",
-                    "title": "Current PADDOX race context",
+                    "source": "live_f1_context",
+                    "title": "Current Formula 1 data feed",
+                    "version": "live",
+                    "date": time.strftime("%Y-%m-%d", time.gmtime()),
+                },
+            })
+            sources.append(_source_from_metadata(context_docs[-1]["metadata"]))
+
+        user_content = _context_content(user_context, 2000)
+        if user_content:
+            context_docs.append({
+                "content": user_content,
+                "metadata": {
+                    "source": "paddox_profile",
+                    "title": "Your PADDOX fan profile",
                     "version": "live",
                     "date": time.strftime("%Y-%m-%d", time.gmtime()),
                 },
@@ -231,7 +324,7 @@ def generate_rag_response(query: str, live_context: dict = None) -> dict:
                 "insufficient_retrieval_context",
             )
 
-        result = ProviderRouter().route_query(clean_query, context_docs)
+        result = ProviderRouter().route_query(clean_query, context_docs, history=clean_history)
         grounded = bool(context_docs) and not result.refused
         return {
             "status": "success",
@@ -246,6 +339,11 @@ def generate_rag_response(query: str, live_context: dict = None) -> dict:
             "data_as_of": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "request_id": request_id,
             "refusal_reason": result.refusal_reason,
+            "suggestions": _follow_up_suggestions(
+                sources if grounded else [],
+                live_context=live_context,
+                user_context=user_context,
+            ),
             "retrieval": {
                 "index_version": _active_index_version,
                 "chunks_used": len(context_docs),
@@ -268,6 +366,7 @@ def generate_rag_response(query: str, live_context: dict = None) -> dict:
             "data_as_of": None,
             "request_id": request_id,
             "refusal_reason": "internal_error",
+            "suggestions": _default_suggestions(),
             "retrieval": {
                 "index_version": _active_index_version,
                 "chunks_used": 0,

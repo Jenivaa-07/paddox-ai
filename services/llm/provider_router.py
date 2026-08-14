@@ -35,7 +35,12 @@ class ProviderRouter:
                 
         return False
 
-    def route_query(self, query: str, context_docs: List[Dict[str, str]]) -> ProviderResult:
+    def route_query(
+        self,
+        query: str,
+        context_docs: List[Dict[str, str]],
+        history: List[Dict[str, str]] = None,
+    ) -> ProviderResult:
         # Since fallback is disabled and we use only groq as active provider
         primary = self.groq
         
@@ -43,14 +48,14 @@ class ProviderRouter:
             raise HTTPException(status_code=503, detail="llm_unavailable")
             
         try:
-            result = primary.generate_answer(query, context_docs)
+            result = primary.generate_answer(query, context_docs, history=history)
             result.fallback_used = False
             return result
         except Exception as e:
             # Check for transitent error, try once more
             if self._is_fallbackable_error(e):
                 try:
-                    result = primary.generate_answer(query, context_docs)
+                    result = primary.generate_answer(query, context_docs, history=history)
                     result.fallback_used = False
                     return result
                 except Exception as retry_e:

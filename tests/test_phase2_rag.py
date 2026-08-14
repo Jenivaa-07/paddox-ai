@@ -164,6 +164,68 @@ def test_retrieval_response_exposes_source_metadata():
     assert response["sources"][0]["title"] == "PADDOX Platform Guide"
     assert response["retrieval"]["chunks_used"] == 1
 
+
+def test_follow_up_uses_bounded_conversation_history_for_retrieval():
+    document = MagicMock(
+        page_content="An undercut uses an earlier pit stop and fresh tyres.",
+        metadata={"source": "f1_terminology.md", "title": "Curated F1 Terminology"},
+    )
+    store = MagicMock()
+    retriever = MagicMock()
+    retriever.invoke.return_value = [document]
+    store.as_retriever.return_value = retriever
+    provider_result = MagicMock(
+        answer="It can work when fresh-tyre pace offsets the pit-stop gap.",
+        refused=False,
+        refusal_reason=None,
+        provider="groq",
+        model="test-model",
+        fallback_used=False,
+        latency_ms=1.0,
+    )
+
+    history = [
+        {"role": "user", "content": "What is an undercut?"},
+        {"role": "assistant", "content": "It is an early pit-stop strategy."},
+    ]
+    with patch("services.rag_chatbot.load_vectorstore", return_value=store), \
+         patch("services.rag_chatbot.ProviderRouter.route_query", return_value=provider_result) as route:
+        response = generate_rag_response("When does it work?", history=history)
+
+    retrieval_text = retriever.invoke.call_args.args[0]
+    assert "What is an undercut?" in retrieval_text
+    assert response["grounded"] is True
+    assert route.call_args.kwargs["history"] == history
+
+
+def test_live_and_profile_context_are_grounded_and_suggest_follow_ups():
+    empty_store = MagicMock()
+    empty_retriever = MagicMock()
+    empty_retriever.invoke.return_value = []
+    empty_store.as_retriever.return_value = empty_retriever
+    provider_result = MagicMock(
+        answer="The next race is the Dutch Grand Prix and you are a Pro Fan.",
+        refused=False,
+        refusal_reason=None,
+        provider="groq",
+        model="test-model",
+        fallback_used=False,
+        latency_ms=1.0,
+    )
+
+    with patch("services.rag_chatbot.load_vectorstore", return_value=empty_store), \
+         patch("services.rag_chatbot.ProviderRouter.route_query", return_value=provider_result):
+        response = generate_rag_response(
+            "What is next for me?",
+            live_context={"nextRace": {"name": "Dutch Grand Prix"}},
+            user_context={"signedIn": True, "fanTier": "Pro Fan"},
+        )
+
+    source_ids = {source["source"] for source in response["sources"]}
+    assert {"live_f1_context", "paddox_profile"}.issubset(source_ids)
+    assert response["grounded"] is True
+    assert len(response["suggestions"]) == 3
+
 # ---------------------------------------------------------
 # Real Integration Tests (Opt-In)
 # ---------------------------------------------------------

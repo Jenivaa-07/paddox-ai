@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field
 import glob
+from typing import Literal
 
 # Guarded imports
 try:
@@ -136,9 +137,17 @@ def ready_check(response: Response):
 
 from services.rag_chatbot import generate_rag_response, get_rag_status
 
+class ChatTurn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=1000)
+
 class ChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     query: str = Field(min_length=2, max_length=600)
+    history: list[ChatTurn] = Field(default_factory=list, max_length=8)
+    live_context: dict | None = None
+    user_context: dict | None = None
 
 def verify_chat_service_key(x_paddox_ai_key: str | None = Header(default=None)):
     expected = os.getenv("AI_SERVICE_KEY", "").strip()
@@ -147,7 +156,12 @@ def verify_chat_service_key(x_paddox_ai_key: str | None = Header(default=None)):
 
 @app.post("/chat", dependencies=[Depends(verify_chat_service_key)])
 def chat(request: ChatRequest):
-    return generate_rag_response(request.query)
+    return generate_rag_response(
+        request.query,
+        history=[turn.model_dump() for turn in request.history],
+        live_context=request.live_context,
+        user_context=request.user_context,
+    )
 
 @app.get("/rag/health")
 def rag_health():
