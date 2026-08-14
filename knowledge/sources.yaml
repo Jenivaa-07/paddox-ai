@@ -1,4 +1,9 @@
 sources:
+  - title: "PADDOX Platform Guide"
+    version: "1.0.0"
+    date: "2026-08-14"
+    origin: "knowledge/docs/paddox_platform_guide.md"
+    file: "paddox_platform_guide.md"
   - title: "PADDOX Platform FAQ"
     version: "1.0.1"
     date: "2026-07-30"

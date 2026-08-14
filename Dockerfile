@@ -11,6 +11,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Cache the local embedding model at image-build time so RAG does not depend on
+# a first-request download in production.
+ENV HF_HOME="/opt/paddox-huggingface"
+ENV SENTENCE_TRANSFORMERS_HOME="/opt/paddox-huggingface"
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+
 # Copy source code
 COPY . .
 

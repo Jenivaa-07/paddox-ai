@@ -1,104 +1,275 @@
-import os
 import json
-import uuid
+import os
+import re
 import time
+import uuid
 from functools import lru_cache
+
+import yaml
+
 from .llm.provider_router import ProviderRouter
 
-# Constants
-INDEX_BASE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "artifacts", "rag", "faiss", "sentence-transformers_all-MiniLM-L6-v2")
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+INDEX_BASE_PATH = os.path.join(
+    BASE_DIR,
+    "artifacts",
+    "rag",
+    "faiss",
+    "sentence-transformers_all-MiniLM-L6-v2",
+)
+KNOWLEDGE_DIR = os.path.join(BASE_DIR, "knowledge", "docs")
+SOURCES_PATH = os.path.join(BASE_DIR, "knowledge", "sources.yaml")
+EMBEDDING_MODEL = os.getenv(
+    "LOCAL_EMBEDDING_MODEL",
+    "sentence-transformers/all-MiniLM-L6-v2",
+)
+
+_active_index_version = "unavailable"
+
+INJECTION_PATTERNS = (
+    r"ignore\s+(all|any|the|previous|prior)\s+(instructions?|prompts?)",
+    r"(show|reveal|print|return|output)\s+(your|the)\s+(system\s+)?prompt",
+    r"developer\s+message",
+    r"jailbreak",
+)
+
+
+def _embedding_model():
+    from langchain_huggingface import HuggingFaceEmbeddings
+
+    return HuggingFaceEmbeddings(
+        model_name=EMBEDDING_MODEL,
+        encode_kwargs={"normalize_embeddings": True},
+    )
+
+
+@lru_cache(maxsize=1)
+def _source_catalog():
+    if not os.path.exists(SOURCES_PATH):
+        return {}
+    with open(SOURCES_PATH, "r", encoding="utf-8") as handle:
+        configured = yaml.safe_load(handle) or {}
+    return {
+        source.get("file"): source
+        for source in configured.get("sources", [])
+        if source.get("file")
+    }
+
+
+def _knowledge_chunks():
+    from langchain_core.documents import Document
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+    documents = []
+    catalog = _source_catalog()
+    if not os.path.isdir(KNOWLEDGE_DIR):
+        return []
+
+    for filename in sorted(os.listdir(KNOWLEDGE_DIR)):
+        if not filename.endswith(".md"):
+            continue
+        path = os.path.join(KNOWLEDGE_DIR, filename)
+        with open(path, "r", encoding="utf-8") as handle:
+            content = handle.read().strip()
+        if not content:
+            continue
+        source = catalog.get(filename, {})
+        documents.append(Document(
+            page_content=content,
+            metadata={
+                "source": filename,
+                "title": source.get("title", filename),
+                "version": source.get("version", ""),
+                "date": source.get("date", ""),
+                "origin": source.get("origin", ""),
+            },
+        ))
+
+    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+    return splitter.split_documents(documents)
+
 
 @lru_cache(maxsize=1)
 def load_vectorstore():
-    # Load the latest versioned FAISS index
-    if not os.path.exists(INDEX_BASE_PATH):
+    """Load a complete saved index or rebuild deterministically from committed docs."""
+    global _active_index_version
+    from langchain_community.vectorstores import FAISS
+
+    embeddings = _embedding_model()
+    if os.path.isdir(INDEX_BASE_PATH):
+        versions = [
+            name for name in os.listdir(INDEX_BASE_PATH)
+            if name.startswith("v") and name[1:].isdigit()
+        ]
+        versions.sort(key=lambda name: int(name[1:]), reverse=True)
+        for version in versions:
+            version_path = os.path.join(INDEX_BASE_PATH, version)
+            faiss_path = os.path.join(version_path, "index.faiss")
+            document_store_path = os.path.join(version_path, "index.pkl")
+            if not (os.path.isfile(faiss_path) and os.path.isfile(document_store_path)):
+                continue
+            try:
+                store = FAISS.load_local(
+                    version_path,
+                    embeddings,
+                    allow_dangerous_deserialization=True,
+                )
+                _active_index_version = version
+                return store
+            except Exception as error:
+                print(f"Skipping incomplete RAG index {version}: {error}")
+
+    chunks = _knowledge_chunks()
+    if not chunks:
+        _active_index_version = "unavailable"
         return None
-        
-    versions = [d for d in os.listdir(INDEX_BASE_PATH) if os.path.isdir(os.path.join(INDEX_BASE_PATH, d)) and d.startswith("v")]
-    if not versions:
-        return None
-        
-    versions.sort(key=lambda x: int(x[1:]))
-    latest_version = versions[-1]
-    
-    versioned_path = os.path.join(INDEX_BASE_PATH, latest_version)
-    
-    try:
-        from langchain_huggingface import HuggingFaceEmbeddings
-        from langchain_community.vectorstores import FAISS
-        
-        embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2",
-            encode_kwargs={"normalize_embeddings": True}
-        )
-        vectorstore = FAISS.load_local(versioned_path, embeddings, allow_dangerous_deserialization=True)
-        return vectorstore
-    except Exception as e:
-        print(f"Error loading FAISS index: {e}")
-        return None
+    _active_index_version = "runtime-docs"
+    return FAISS.from_documents(chunks, embeddings)
+
+
+def get_rag_status():
+    store = load_vectorstore()
+    chunk_count = int(getattr(getattr(store, "index", None), "ntotal", 0)) if store else 0
+    return {
+        "ready": store is not None and chunk_count > 0,
+        "index_version": _active_index_version,
+        "chunk_count": chunk_count,
+        "embedding_model": EMBEDDING_MODEL,
+    }
+
+
+def _source_from_metadata(metadata):
+    return {
+        "source": str(metadata.get("source", "unknown")),
+        "title": str(metadata.get("title", metadata.get("source", "Verified PADDOX source"))),
+        "version": str(metadata.get("version", "")),
+        "date": str(metadata.get("date", "")),
+    }
+
+
+def _refusal(answer, request_id, reason):
+    return {
+        "status": "success",
+        "answer": answer,
+        "grounded": False,
+        "sources": [],
+        "retrieved_context_sources": [],
+        "provider": "retrieval",
+        "model": "none",
+        "fallback_used": False,
+        "latency_ms": 0.0,
+        "data_as_of": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "request_id": request_id,
+        "refusal_reason": reason,
+        "retrieval": {
+            "index_version": _active_index_version,
+            "chunks_used": 0,
+        },
+    }
+
+
+def _looks_like_prompt_injection(query):
+    return any(re.search(pattern, query, flags=re.IGNORECASE) for pattern in INJECTION_PATTERNS)
+
 
 def generate_rag_response(query: str, live_context: dict = None) -> dict:
     request_id = str(uuid.uuid4())
-    
+    clean_query = str(query or "").strip()
+
+    if len(clean_query) < 2 or len(clean_query) > 600:
+        return _refusal(
+            "Please ask a PADDOX or Formula 1 question between 2 and 600 characters.",
+            request_id,
+            "invalid_query",
+        )
+    if _looks_like_prompt_injection(clean_query):
+        return _refusal(
+            "I can’t follow instructions that try to override the AI Pit Wall. Ask me a PADDOX or Formula 1 question instead.",
+            request_id,
+            "prompt_injection",
+        )
+
     try:
         vectorstore = load_vectorstore()
-        context_docs = []
-        citations = []
-        
+        documents = []
         if vectorstore:
-            retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-            docs = retriever.invoke(query)
-            
-            for doc in docs:
-                source = doc.metadata.get("source", "unknown")
-                if source not in citations:
-                    citations.append(source)
-                context_docs.append({
-                    "content": doc.page_content,
-                    "metadata": doc.metadata
-                })
-        
+            threshold = min(0.95, max(0.0, float(os.getenv("RAG_MIN_RELEVANCE", "0.28"))))
+            retriever = vectorstore.as_retriever(
+                search_type="similarity_score_threshold",
+                search_kwargs={"k": 4, "score_threshold": threshold},
+            )
+            documents = retriever.invoke(clean_query)
+
+        context_docs = []
+        sources = []
+        seen_sources = set()
+        for document in documents:
+            metadata = dict(document.metadata or {})
+            context_docs.append({"content": document.page_content, "metadata": metadata})
+            source = _source_from_metadata(metadata)
+            if source["source"] not in seen_sources:
+                seen_sources.add(source["source"])
+                sources.append(source)
+
+        # live_context is only for trusted in-process callers such as voice routing.
         if live_context:
             context_docs.append({
-                "content": json.dumps(live_context),
-                "metadata": {"source": "live_context"}
+                "content": json.dumps(live_context, ensure_ascii=False),
+                "metadata": {
+                    "source": "live_context",
+                    "title": "Current PADDOX race context",
+                    "version": "live",
+                    "date": time.strftime("%Y-%m-%d", time.gmtime()),
+                },
             })
-            citations.append("live_context")
-            
-        router = ProviderRouter()
-        result = router.route_query(query, context_docs)
-        
+            sources.append(_source_from_metadata(context_docs[-1]["metadata"]))
+
+        if not context_docs:
+            return _refusal(
+                "I couldn’t find enough verified PADDOX or F1 evidence for that question. Try asking about PADDOX features, F1 terms, historical data, merch, or policies.",
+                request_id,
+                "insufficient_retrieval_context",
+            )
+
+        result = ProviderRouter().route_query(clean_query, context_docs)
+        grounded = bool(context_docs) and not result.refused
         return {
             "status": "success",
             "answer": result.answer,
-            "grounded": not result.refused,
-            "retrieved_context_sources": citations,
+            "grounded": grounded,
+            "sources": sources if grounded else [],
+            "retrieved_context_sources": [source["source"] for source in sources] if grounded else [],
             "provider": result.provider,
             "model": result.model,
             "fallback_used": result.fallback_used,
             "latency_ms": result.latency_ms,
-            "data_as_of": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-            "request_id": request_id
+            "data_as_of": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "request_id": request_id,
+            "refusal_reason": result.refusal_reason,
+            "retrieval": {
+                "index_version": _active_index_version,
+                "chunks_used": len(context_docs),
+            },
         }
-        
-    except Exception as e:
-        # Standardize the error response without falling back silently on non-provider issues
-        # Or letting the router's 503 HTTPExceptions bubble up
-        if hasattr(e, 'status_code'):
-            raise e
+    except Exception as error:
+        if hasattr(error, "status_code"):
+            raise error
+        print(f"RAG request failed: {error}")
         return {
             "status": "error",
-            "answer": f"Error: Unable to process request. ({str(e)})",
+            "answer": "The AI Pit Wall could not process that request.",
             "grounded": False,
+            "sources": [],
             "retrieved_context_sources": [],
             "provider": "error",
             "model": "error",
             "fallback_used": False,
             "latency_ms": 0.0,
             "data_as_of": None,
-            "request_id": request_id
+            "request_id": request_id,
+            "refusal_reason": "internal_error",
+            "retrieval": {
+                "index_version": _active_index_version,
+                "chunks_used": 0,
+            },
         }
-
-# --- OpenAI Voice Implementation Placeholder ---
-# Any future OpenAI Voice implementation should be moved to a dedicated 
-# services/voice module and not mixed with the LLM RAG chatbot configuration.

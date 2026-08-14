@@ -11,5 +11,11 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
+      - key: AI_SERVICE_KEY
+        sync: false
+      - key: RAG_MIN_RELEVANCE
+        value: "0.28"
+      - key: REQUIRE_PREDICTIVE_MODELS
+        value: "false"
       - key: EXPECTED_LSTM_SHA256
         sync: false

@@ -25,11 +25,20 @@ def verify_checksum(filepath, expected_hash):
 
 def download_and_verify():
     missing = False
+    require_predictive_models = os.environ.get(
+        "REQUIRE_PREDICTIVE_MODELS", "false"
+    ).strip().lower() in {"1", "true", "yes", "on"}
     
     bucket = os.environ.get("ARTIFACT_BUCKET_URL")
     if not bucket:
-        logger.error("ARTIFACT_BUCKET_URL is not set.")
-        sys.exit(1)
+        if require_predictive_models:
+            logger.error("ARTIFACT_BUCKET_URL is not set.")
+            sys.exit(1)
+        logger.warning(
+            "Predictive model storage is not configured; skipping optional "
+            "race and fantasy artifacts. RAG routes can still start."
+        )
+        return False
         
     is_test = os.environ.get("PYTEST_CURRENT_TEST") is not None or os.environ.get("TEST_ENV") == "true"
     
@@ -79,6 +88,7 @@ def download_and_verify():
         sys.exit(1)
     else:
         logger.info("All deployment artifacts verified successfully.")
+        return True
         
 if __name__ == "__main__":
     download_and_verify()

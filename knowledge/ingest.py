@@ -45,6 +45,12 @@ def get_next_version() -> str:
 
 def ingest():
     ensure_docs_exist()
+    with open(YAML_PATH, "r", encoding="utf-8") as f:
+        source_catalog = {
+            source.get("file"): source
+            for source in (yaml.safe_load(f) or {}).get("sources", [])
+            if source.get("file")
+        }
     
     print("Loading documents from", KNOWLEDGE_DIR)
     docs = []
@@ -52,9 +58,16 @@ def ingest():
     for filepath in glob.glob(os.path.join(KNOWLEDGE_DIR, "*.md")):
         loader = TextLoader(filepath)
         file_docs = loader.load()
-        # Add metadata source
+        filename = os.path.basename(filepath)
+        source = source_catalog.get(filename, {})
         for d in file_docs:
-            d.metadata["source"] = os.path.basename(filepath)
+            d.metadata.update({
+                "source": filename,
+                "title": source.get("title", filename),
+                "version": source.get("version", ""),
+                "date": source.get("date", ""),
+                "origin": source.get("origin", ""),
+            })
             
         docs.extend(file_docs)
         

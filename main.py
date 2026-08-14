@@ -1,9 +1,10 @@
 import os
+import hmac
 import json
 import platform
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Response
-from pydantic import BaseModel
+from fastapi import Depends, FastAPI, Header, HTTPException, Response
+from pydantic import BaseModel, ConfigDict, Field
 import glob
 
 # Guarded imports
@@ -86,6 +87,11 @@ async def lifespan(app: FastAPI):
             
             if "sentiment" not in models:
                 print("No production-eligible sentiment model found.")
+    try:
+        rag_status = get_rag_status()
+        print(f"RAG ready: {rag_status['ready']} ({rag_status['index_version']}, {rag_status['chunk_count']} chunks)")
+    except Exception as error:
+        print(f"RAG warm-up failed: {error}")
     print("Models loaded successfully.")
     
     yield
@@ -128,15 +134,27 @@ def ready_check(response: Response):
 
 # --- RAG & Voice ---
 
-from services.rag_chatbot import generate_rag_response
+from services.rag_chatbot import generate_rag_response, get_rag_status
 
 class ChatRequest(BaseModel):
-    query: str
-    context: dict = None
+    model_config = ConfigDict(extra="forbid")
+    query: str = Field(min_length=2, max_length=600)
 
-@app.post("/chat")
+def verify_chat_service_key(x_paddox_ai_key: str | None = Header(default=None)):
+    expected = os.getenv("AI_SERVICE_KEY", "").strip()
+    if expected and (not x_paddox_ai_key or not hmac.compare_digest(x_paddox_ai_key, expected)):
+        raise HTTPException(status_code=401, detail="invalid_service_key")
+
+@app.post("/chat", dependencies=[Depends(verify_chat_service_key)])
 def chat(request: ChatRequest):
-    return generate_rag_response(request.query, request.context)
+    return generate_rag_response(request.query)
+
+@app.get("/rag/health")
+def rag_health():
+    status = get_rag_status()
+    if not status["ready"]:
+        raise HTTPException(status_code=503, detail="rag_not_ready")
+    return {"status": "ready", **status}
 
 # --- Local ML Models ---
 class SentimentRequest(BaseModel):

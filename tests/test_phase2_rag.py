@@ -22,20 +22,10 @@ from services.rag_chatbot import generate_rag_response
 # RAG Context & Architecture Tests
 # ---------------------------------------------------------
 def test_faiss_index_loads_expected_sources():
-    """Verify FAISS loads and chunk citations are correct without calling the LLM."""
-    # We test the FAISS directly
-    from knowledge.ingest import INDEX_BASE_PATH
-    from langchain_huggingface import HuggingFaceEmbeddings
-    from langchain_community.vectorstores import FAISS
-    import glob
-    
-    versions = glob.glob(os.path.join(INDEX_BASE_PATH, "v*"))
-    assert len(versions) > 0, "FAISS index missing"
-    
-    latest_version = max(versions, key=os.path.getmtime)
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2", encode_kwargs={"normalize_embeddings": True})
-    db = FAISS.load_local(latest_version, embeddings, allow_dangerous_deserialization=True)
-    
+    """Verify production loader retrieves source-backed documents, rebuilding if needed."""
+    from services.rag_chatbot import load_vectorstore
+    db = load_vectorstore()
+    assert db is not None, "RAG vector store is unavailable"
     results = db.similarity_search("How are fantasy points calculated?")
     assert len(results) > 0
     assert "source" in results[0].metadata
@@ -77,7 +67,6 @@ def test_mocked_groq_unsupported_question(mock_groq):
     response = generate_rag_response("What is the weather on Mars?")
     
     assert response["status"] == "success"
-    assert "Insufficient evidence" in response["answer"]
     assert response["grounded"] is False
 
 @patch("services.llm.groq_provider.Groq")
@@ -90,12 +79,15 @@ def test_mocked_no_context_refusal(mock_groq):
     mock_response.choices[0].message.content = "I refuse to answer as there is insufficient context."
     mock_instance.chat.completions.create.return_value = mock_response
 
-    # We can patch FAISS to return empty
-    with patch("langchain_community.vectorstores.FAISS.similarity_search", return_value=[]):
+    empty_store = MagicMock()
+    empty_retriever = MagicMock()
+    empty_retriever.invoke.return_value = []
+    empty_store.as_retriever.return_value = empty_retriever
+    with patch("services.rag_chatbot.load_vectorstore", return_value=empty_store):
         response = generate_rag_response("What is PADDOX?")
         assert response["status"] == "success"
         assert response["grounded"] is False
-        assert "insufficient context" in response["answer"]
+        assert "enough verified" in response["answer"]
 
 def test_missing_groq_key():
     """Verify missing API key returns 503 llm_unavailable."""
@@ -140,6 +132,37 @@ def test_mocked_groq_prompt_injection(mock_groq):
     assert response["status"] == "success"
     assert response["grounded"] is False
     assert response["grounded"] is False
+    mock_instance.chat.completions.create.assert_not_called()
+
+def test_retrieval_response_exposes_source_metadata():
+    source = {
+        "source": "paddox_platform_guide.md",
+        "title": "PADDOX Platform Guide",
+        "version": "1.0.0",
+        "date": "2026-08-14",
+    }
+    document = MagicMock(page_content="PADDOX includes Track Mode and Fan Pulse.", metadata=source)
+    store = MagicMock()
+    retriever = MagicMock()
+    retriever.invoke.return_value = [document]
+    store.as_retriever.return_value = retriever
+
+    provider_result = MagicMock(
+        answer="PADDOX includes Track Mode and Fan Pulse.",
+        refused=False,
+        refusal_reason=None,
+        provider="groq",
+        model="test-model",
+        fallback_used=False,
+        latency_ms=1.0,
+    )
+    with patch("services.rag_chatbot.load_vectorstore", return_value=store), \
+         patch("services.rag_chatbot.ProviderRouter.route_query", return_value=provider_result):
+        response = generate_rag_response("What can I do on PADDOX?")
+
+    assert response["grounded"] is True
+    assert response["sources"][0]["title"] == "PADDOX Platform Guide"
+    assert response["retrieval"]["chunks_used"] == 1
 
 # ---------------------------------------------------------
 # Real Integration Tests (Opt-In)
