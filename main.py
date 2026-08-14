@@ -135,7 +135,7 @@ class ChatRequest(BaseModel):
     context: dict = None
 
 @app.post("/chat")
-async def chat(request: ChatRequest):
+def chat(request: ChatRequest):
     return generate_rag_response(request.query, request.context)
 
 # --- Local ML Models ---
@@ -143,7 +143,7 @@ class SentimentRequest(BaseModel):
     text: str
 
 @app.post("/analyze-sentiment")
-async def analyze_sentiment(request: SentimentRequest, response: Response):
+def analyze_sentiment(request: SentimentRequest, response: Response):
     if "sentiment" not in models:
         response.status_code = 503
         return {"status": "model_not_ready"}
@@ -163,7 +163,7 @@ race_predictor_svc = RacePredictorService()
 fantasy_predictor_svc = FantasyPredictorService()
 
 @app.post("/predict-race")
-async def predict_race(request: dict, response: Response):
+def predict_race(request: dict, response: Response):
     start_time = time.time()
     try:
         res = race_predictor_svc.predict(request)
@@ -181,7 +181,7 @@ async def predict_race(request: dict, response: Response):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/predict-fantasy")
-async def predict_fantasy(request: dict, response: Response):
+def predict_fantasy(request: dict, response: Response):
     start_time = time.time()
     try:
         res = fantasy_predictor_svc.predict_batch(request)
@@ -207,7 +207,7 @@ class RecommendRequest(BaseModel):
     exclude_item_ids: list = []
 
 @app.post("/recommend")
-async def recommend(request: RecommendRequest, response: Response):
+def recommend(request: RecommendRequest, response: Response):
     try:
         recs, strategy, model_version, latency = recommendation_service.get_recommendations(
             request.user_id, request.context, request.k, request.exclude_item_ids
@@ -234,6 +234,7 @@ from services.voice.transcription_service import transcription_service
 from services.voice.voice_assistant_service import voice_assistant_service
 from typing import List, Dict, Tuple, Optional
 from fastapi import File, UploadFile, Form
+from fastapi.concurrency import run_in_threadpool
 
 @app.post("/voice/transcribe", response_model=VoiceTranscribeResponse)
 async def voice_transcribe(
@@ -252,7 +253,12 @@ async def voice_transcribe(
         if duration > 30.0:
             raise HTTPException(status_code=413, detail="audio_too_long")
             
-        result = transcription_service.transcribe(content, file.filename, language)
+        result = await run_in_threadpool(
+            transcription_service.transcribe,
+            content,
+            file.filename,
+            language,
+        )
         
         return VoiceTranscribeResponse(
             transcript=result["text"],
@@ -286,7 +292,13 @@ async def voice_ask(
         if duration > 30.0:
             raise HTTPException(status_code=413, detail="audio_too_long")
             
-        response = voice_assistant_service.process_voice_query(content, file.filename, language, race_id)
+        response = await run_in_threadpool(
+            voice_assistant_service.process_voice_query,
+            content,
+            file.filename,
+            language,
+            race_id,
+        )
         return response
     except HTTPException:
         raise
@@ -294,7 +306,7 @@ async def voice_ask(
         raise HTTPException(status_code=400, detail="invalid_request")
 
 @app.post("/rank-highlights")
-async def rank_highlights(request: RankHighlightsRequest, response: Response):
+def rank_highlights(request: RankHighlightsRequest, response: Response):
     try:
         res = highlight_service.rank_highlights(
             request.user_id, request.race_id, request.candidate_highlight_ids, request.k

@@ -2,11 +2,13 @@ import os
 import json
 import uuid
 import time
+from functools import lru_cache
 from .llm.provider_router import ProviderRouter
 
 # Constants
 INDEX_BASE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "artifacts", "rag", "faiss", "sentence-transformers_all-MiniLM-L6-v2")
 
+@lru_cache(maxsize=1)
 def load_vectorstore():
     # Load the latest versioned FAISS index
     if not os.path.exists(INDEX_BASE_PATH):

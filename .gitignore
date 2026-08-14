@@ -1,6 +1,7 @@
 .venv/
 __pycache__/
 *.pyc
+environment_report.json
 
 # Data & Models
 data/raw/*

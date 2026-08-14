@@ -33,7 +33,7 @@ class RecommendationService:
                 self.item_map = json.load(f)
                 
             self.model = TwoTowerRecommender(len(self.user_map), len(self.item_map), embed_dim=self.config.get("embedding_dim", 64))
-            self.model.load_state_dict(torch.load(os.path.join(run_dir, "model.pt")))
+            self.model.load_state_dict(torch.load(os.path.join(run_dir, "model.pt"), weights_only=True))
             self.model.eval()
             self.is_ready = True
             self.model_version = latest_run
