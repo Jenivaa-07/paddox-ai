@@ -17,5 +17,11 @@ services:
         value: "0.28"
       - key: REQUIRE_PREDICTIVE_MODELS
         value: "false"
+      - key: FANTASY_RUNTIME_BOOTSTRAP
+        value: "true"
+      - key: FANTASY_BOOTSTRAP_SEASONS
+        value: "2022,2023,2024,2025,2026"
+      - key: JOLPICA_USER_AGENT
+        value: "PADDOX-AI/1.0 FastF1/3.3.2"
       - key: EXPECTED_LSTM_SHA256
         sync: false
