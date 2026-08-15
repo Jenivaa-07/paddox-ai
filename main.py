@@ -88,11 +88,12 @@ async def lifespan(app: FastAPI):
             
             if "sentiment" not in models:
                 print("No production-eligible sentiment model found.")
-    try:
-        rag_status = get_rag_status()
-        print(f"RAG ready: {rag_status['ready']} ({rag_status['index_version']}, {rag_status['chunk_count']} chunks)")
-    except Exception as error:
-        print(f"RAG warm-up failed: {error}")
+
+    # RAG used to initialise the embedding model + FAISS index synchronously here.
+    # That delayed /health and predictive endpoints during a Render cold start even
+    # though Fantasy/Race ML does not depend on RAG. Keep RAG lazy: the first chat
+    # or /rag/health request warms it on demand while predictive ML can serve first.
+    print("RAG warm-up deferred until first chat request.")
     print("Models loaded successfully.")
     
     yield
