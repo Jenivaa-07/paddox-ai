@@ -29,6 +29,7 @@ ENV FASTF1_CACHE_DIR="/tmp/paddox-fastf1-cache"
 # Expose port
 EXPOSE 8000
 
-# Download models and start service. The wrapper keeps the existing app/lifespan
-# and mounts the FastF1 Pit Wall replay router before Uvicorn begins serving.
-CMD python download_models.py && uvicorn main_with_replay:app --host $HOST --port $PORT
+# Start serving immediately. main_with_replay preserves the existing app and
+# bootstraps missing predictive artifacts in the background, so Render health
+# checks and FastF1 replay do not wait for fantasy-model retraining.
+CMD uvicorn main_with_replay:app --host $HOST --port $PORT
