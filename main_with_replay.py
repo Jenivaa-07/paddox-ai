@@ -1,6 +1,5 @@
-import asyncio
 import logging
-from contextlib import asynccontextmanager
+import threading
 
 from main import app, fantasy_predictor_svc, race_predictor_svc
 from services.pitwall_replay import router as pitwall_replay_router
@@ -10,14 +9,9 @@ logger = logging.getLogger("paddox.predictive_bootstrap")
 
 app.include_router(pitwall_replay_router)
 
-# Preserve main.py's existing lifespan/model setup, but do not block the whole
-# service behind artifact download / fantasy retraining. Render can mark /health
-# healthy immediately; predictive artifacts finish in a background thread and
-# are loaded into the already-created service objects when ready.
-_original_lifespan = app.router.lifespan_context
-
 
 def _bootstrap_predictive_models() -> None:
+    """Restore optional predictive artifacts without blocking Render startup."""
     try:
         result = download_and_verify()
         if result.get("rf_ready"):
@@ -27,19 +21,14 @@ def _bootstrap_predictive_models() -> None:
             race_predictor_svc.load_model()
             logger.info("Race predictor reloaded after background bootstrap.")
     except BaseException as exc:
-        # download_and_verify can raise SystemExit when production policy requires
-        # unavailable artifacts. Never let that terminate the serving process.
+        # download_and_verify may raise SystemExit when strict artifact policy is
+        # enabled. This background worker must never terminate the API process.
         logger.exception("Background predictive bootstrap failed: %s", exc)
 
 
-@asynccontextmanager
-async def _nonblocking_lifespan(app_instance):
-    async with _original_lifespan(app_instance):
-        task = asyncio.create_task(asyncio.to_thread(_bootstrap_predictive_models))
-        app_instance.state.predictive_bootstrap_task = task
-        yield
-        if not task.done():
-            task.cancel()
-
-
-app.router.lifespan_context = _nonblocking_lifespan
+# Uvicorn can bind immediately while missing models are restored independently.
+threading.Thread(
+    target=_bootstrap_predictive_models,
+    name="paddox-predictive-bootstrap",
+    daemon=True,
+).start()
