@@ -24,9 +24,11 @@ COPY . .
 ENV PYTHONPATH="."
 ENV HOST="0.0.0.0"
 ENV PORT=8000
+ENV FASTF1_CACHE_DIR="/tmp/paddox-fastf1-cache"
 
 # Expose port
 EXPOSE 8000
 
-# Download models and start service
-CMD python download_models.py && uvicorn main:app --host $HOST --port $PORT
+# Download models and start service. The wrapper keeps the existing app/lifespan
+# and mounts the FastF1 Pit Wall replay router before Uvicorn begins serving.
+CMD python download_models.py && uvicorn main_with_replay:app --host $HOST --port $PORT
