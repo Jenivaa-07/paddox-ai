@@ -1,0 +1,99 @@
+name: PADDOX Research Reproducibility
+
+on:
+  workflow_dispatch:
+    inputs:
+      fetch_data:
+        description: "Fetch/rebuild FastF1 raw data before training (can take hours and may hit API rate limits)"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: paddox-research-reproducibility
+  cancel-in-progress: false
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout research branch
+        uses: actions/checkout@v4
+        with:
+          ref: research/reproducibility-audit
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-research.txt
+
+      - name: Install research dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-research.txt
+
+      - name: Restore FastF1 cache
+        uses: actions/cache@v4
+        with:
+          path: data/cache
+          key: fastf1-cache-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            fastf1-cache-${{ runner.os }}-
+
+      - name: Fetch FastF1 data when requested
+        if: inputs.fetch_data
+        run: python data_pipeline/fetch_predictive_data.py
+
+      - name: Confirm raw race data exists
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          races = list(Path("data/raw/predictive").glob("*/*/R/results.csv"))
+          if not races:
+              raise SystemExit(
+                  "No raw race result CSVs found. Run workflow_dispatch with fetch_data=true."
+              )
+          print(f"Found {len(races)} race result files.")
+          PY
+
+      - name: Build race and fantasy datasets
+        run: |
+          python data_pipeline/build_race_sequences.py
+          python data_pipeline/build_fantasy_features.py
+
+      - name: Run metric unit tests
+        run: pytest -q tests/test_research_metrics.py
+
+      - name: Train LSTM race predictor
+        run: python models/lstm_race_trainer.py
+
+      - name: Train Random Forest fantasy predictor
+        run: python models/rf_fantasy_trainer.py
+
+      - name: Recompute held-out research audit
+        run: |
+          LSTM_RUN=$(python -c "import json; print(json.load(open('artifacts/predictive/lstm_race/current_model.json'))['run_id'])")
+          RF_RUN=$(python -c "import json; print(json.load(open('artifacts/predictive/rf_fantasy/current_model.json'))['run_id'])")
+          echo "LSTM_RUN=$LSTM_RUN" >> "$GITHUB_ENV"
+          echo "RF_RUN=$RF_RUN" >> "$GITHUB_ENV"
+          python scripts/research_reproducibility_audit.py --lstm-run "$LSTM_RUN" --fantasy-run "$RF_RUN"
+
+      - name: Upload datasets, model runs, and audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paddox-research-${{ github.run_id }}
+          if-no-files-found: warn
+          retention-days: 90
+          path: |
+            data/processed/predictive/
+            artifacts/predictive/lstm_race/
+            artifacts/predictive/rf_fantasy/
+            reports/predictive/reproducibility_audit.json
+            reports/predictive/fetch_logs/
