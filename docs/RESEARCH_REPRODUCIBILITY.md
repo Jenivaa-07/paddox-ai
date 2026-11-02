@@ -55,7 +55,7 @@ Do not copy new metric values into the paper until the dataset rebuild, both tra
 pytest -q tests/test_research_metrics.py
 ```
 
-Run the full project test suite as well before merging this branch. This repository change was authored through GitHub file operations; a local Python environment was not available in this editing session, so the tests are not represented as executed or passed.
+The focused tests also cover held-out prediction race membership and JSON-safe handling of undefined metrics. Run the full project test suite as well before merging this branch. This repository change was authored through GitHub file operations; a local Python environment was not available in this editing session, so the tests are not represented as executed or passed.
 
 
 ## GitHub Actions reproduction run
