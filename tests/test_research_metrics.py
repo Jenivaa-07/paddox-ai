@@ -34,12 +34,20 @@ def test_mean_race_ndcg_averages_separate_race_rankings():
 
 
 
-def test_prediction_race_coverage_accepts_only_test_races():
+def test_prediction_race_coverage_requires_every_test_race():
     frame = pd.DataFrame({"season": [2026, 2026], "round": [1, 1]})
-    split_info = {"splits": {"test": {"race_ids": ["2026-1", "2026-2"]}}}
+    split_info = {"splits": {"test": {"race_ids": ["2026-1"]}}}
     result = assert_predictions_match_test_races(frame, split_info, "test")
     assert result["all_predictions_within_test_split"] is True
-    assert result["missing_test_races"] == ["2026-2"]
+    assert result["missing_test_races"] == []
+
+
+def test_prediction_race_coverage_rejects_missing_test_races():
+    frame = pd.DataFrame({"season": [2026], "round": [1]})
+    split_info = {"splits": {"test": {"race_ids": ["2026-1", "2026-2"]}}}
+    import pytest
+    with pytest.raises(ValueError, match="do not cover every held-out test race"):
+        assert_predictions_match_test_races(frame, split_info, "test")
 
 
 def test_prediction_race_coverage_rejects_races_outside_test_split():
