@@ -1,6 +1,7 @@
 import os
 import glob
 import json
+import hashlib
 import pandas as pd
 import numpy as np
 
@@ -159,14 +160,19 @@ def build_features(raw_dir, out_dir):
         how='left'
     )
     
-    # Split rules: Train: 2022-2024, Val: 2025, Test: 2026
+    # Split rules: Train: 2022-2024, Val: 2025, Test: 2026.
+    # Build masks independently for each frame: sequence rows and fantasy
+    # rows have different lengths and indices (multiple checkpoints per driver).
     train_cond = seq_df['season'].between(2022, 2024)
     val_cond = seq_df['season'] == 2025
     test_cond = seq_df['season'] == 2026
-    
-    # Check if 2025/2026 exist
-    has_val = seq_df[val_cond].shape[0] > 0
-    has_test = seq_df[test_cond].shape[0] > 0
+    fant_train_cond = fant_df['season'].between(2022, 2024)
+    fant_val_cond = fant_df['season'] == 2025
+    fant_test_cond = fant_df['season'] == 2026
+
+    # Check if 2025/2026 exist in both datasets before choosing fixed boundaries.
+    has_val = seq_df[val_cond].shape[0] > 0 and fant_df[fant_val_cond].shape[0] > 0
+    has_test = seq_df[test_cond].shape[0] > 0 and fant_df[fant_test_cond].shape[0] > 0
     
     if not has_val or not has_test:
         print("2025/2026 data unavailable. Falling back to chronological 70/15/15 race-level split.")
@@ -186,15 +192,55 @@ def build_features(raw_dir, out_dir):
         train_fant, val_fant, test_fant = apply_split(fant_df)
     else:
         train_seq, val_seq, test_seq = seq_df[train_cond], seq_df[val_cond], seq_df[test_cond]
-        train_fant, val_fant, test_fant = fant_df[train_cond], fant_df[val_cond], fant_df[test_cond]
+        train_fant = fant_df[fant_train_cond]
+        val_fant = fant_df[fant_val_cond]
+        test_fant = fant_df[fant_test_cond]
         
     os.makedirs(out_dir, exist_ok=True)
     
     # Save sequences
-    train_seq.to_csv(f"{out_dir}/train_race_seq.csv", index=False)
-    val_seq.to_csv(f"{out_dir}/val_race_seq.csv", index=False)
-    test_seq.to_csv(f"{out_dir}/test_race_seq.csv", index=False)
-    
+    split_frames = {"train": train_seq, "val": val_seq, "test": test_seq}
+    split_manifest = {
+        "source": "FastF1-derived public race/session data",
+        "split_unit": "race (season, round)",
+        "split_strategy": "fixed season boundaries" if has_val and has_test else "chronological 70/15/15 race-level fallback",
+        "split_boundaries": (
+            {"train_seasons": "2022-2024", "validation_seasons": [2025], "test_seasons": [2026]}
+            if has_val and has_test else
+            {"strategy": "chronological ordered race list; integer cut points at 70% and 85%"}
+        ),
+        "random_seed": 42,
+        "splits": {}
+    }
+    for split_name, frame in split_frames.items():
+        path = f"{out_dir}/{split_name}_race_seq.csv"
+        frame.to_csv(path, index=False)
+        race_ids = sorted(
+            frame[["season", "round"]].drop_duplicates()
+            .astype(int).itertuples(index=False, name=None)
+        )
+        digest = hashlib.sha256(open(path, "rb").read()).hexdigest()
+        split_manifest["splits"][split_name] = {
+            "rows": int(len(frame)),
+            "unique_races": len(race_ids),
+            "race_ids": [f"{season}-{round_no}" for season, round_no in race_ids],
+            "sha256": digest
+        }
+
+    race_sets = {
+        name: set(frame[["season", "round"]].drop_duplicates().astype(int).itertuples(index=False, name=None))
+        for name, frame in split_frames.items()
+    }
+    split_manifest["no_race_overlap"] = not (
+        (race_sets["train"] & race_sets["val"])
+        or (race_sets["train"] & race_sets["test"])
+        or (race_sets["val"] & race_sets["test"])
+    )
+    if not split_manifest["no_race_overlap"]:
+        raise RuntimeError("Race-level split leakage detected: a race appears in multiple splits.")
+    with open(f"{out_dir}/race_split_manifest.json", "w") as manifest_file:
+        json.dump(split_manifest, manifest_file, indent=2)
+
     # Save raw fantasy before targets are built
     train_fant.to_csv(f"{out_dir}/train_fantasy_raw.csv", index=False)
     val_fant.to_csv(f"{out_dir}/val_fantasy_raw.csv", index=False)

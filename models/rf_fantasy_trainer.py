@@ -1,5 +1,7 @@
 import os
 import json
+import hashlib
+import shutil
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -22,20 +24,55 @@ def load_data(split):
         return pd.DataFrame()
 
 def ndcg_score_at_k(y_true, y_pred, k=5):
+    """NDCG for one ranking group (one race)."""
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    if y_true.size == 0:
+        return 0.0
+    # PADDOX fantasy scoring can assign negative DNF/DSQ points. NDCG
+    # requires non-negative relevance, so shift relevance within each race.
+    y_true = y_true - np.min(y_true)
+    k = min(int(k), y_true.size)
+    discounts = np.log2(np.arange(2, k + 2))
     order = np.argsort(y_pred)[::-1][:k]
-    dcg = sum(y_true[i] / np.log2(idx + 2) for idx, i in enumerate(order))
-    
     ideal_order = np.argsort(y_true)[::-1][:k]
-    idcg = sum(y_true[i] / np.log2(idx + 2) for idx, i in enumerate(ideal_order))
-    
+    dcg = float(np.sum(y_true[order] / discounts))
+    idcg = float(np.sum(y_true[ideal_order] / discounts))
     return dcg / idcg if idcg > 0 else 0.0
 
+
+def mean_race_ndcg(df, true_col, pred_col, k=5):
+    """Macro-average NDCG across races; each race is a separate ranking task."""
+    scores = [
+        ndcg_score_at_k(group[true_col].to_numpy(), group[pred_col].to_numpy(), k)
+        for _, group in df.groupby(["season", "round"], sort=False)
+    ]
+    return float(np.mean(scores)) if scores else 0.0
+
+
+def paired_race_bootstrap_delta(df, true_col, model_col, baseline_col,
+                                n_iterations=2000, seed=42):
+    """95% CI for model MAE minus baseline MAE using paired race clusters."""
+    groups = [group for _, group in df.groupby(["season", "round"], sort=False)]
+    if len(groups) < 2:
+        return None
+    rng = np.random.default_rng(seed)
+    deltas = []
+    for _ in range(n_iterations):
+        indices = rng.integers(0, len(groups), size=len(groups))
+        sample = pd.concat([groups[i] for i in indices], ignore_index=True)
+        model_mae = mean_absolute_error(sample[true_col], sample[model_col])
+        baseline_mae = mean_absolute_error(sample[true_col], sample[baseline_col])
+        deltas.append(float(model_mae - baseline_mae))
+    return [float(np.percentile(deltas, 2.5)), float(np.percentile(deltas, 97.5))]
+
 def bootstrap_ci_by_race(df, true_col, pred_col, metric_fn, n_iterations=1000, ci=95):
+    """Deterministic race-clustered bootstrap confidence interval."""
     races = df[['season', 'round']].drop_duplicates()
     scores = []
     
-    for _ in range(n_iterations):
-        sample_races = races.sample(frac=1.0, replace=True)
+    for iteration in range(n_iterations):
+        sample_races = races.sample(frac=1.0, replace=True, random_state=42 + iteration)
         sample_df = sample_races.merge(df, on=['season', 'round'], how='left')
         if len(sample_df) > 0:
             score = metric_fn(sample_df[true_col].values, sample_df[pred_col].values)
@@ -113,18 +150,25 @@ def train_rf_model():
     r2 = r2_score(y_test, y_pred)
     spearman, _ = spearmanr(y_test, y_pred)
     
-    ndcg5 = ndcg_score_at_k(y_test, y_pred, k=5)
-    ndcg10 = ndcg_score_at_k(y_test, y_pred, k=10)
-    
-    # Baseline: linear mapping of grid position to fantasy points (inverse)
-    # Simple proxy: 25 - grid
-    base_pred = 25 - X_test['qualifying_position'].fillna(20.0).values
-    test_df['baseline_points'] = base_pred
-    mae_base = mean_absolute_error(y_test, base_pred)
-    
+    # Ranking is evaluated within each race, not across the entire test set.
+    ndcg5 = mean_race_ndcg(test_df.assign(_truth=y_test), '_truth', 'pred_points', k=5)
+    ndcg10 = mean_race_ndcg(test_df.assign(_truth=y_test), '_truth', 'pred_points', k=10)
+
+    # Explicit baselines: preserve the existing grid-position proxy and add
+    # train-only constant baselines. Never estimate a baseline from test labels.
+    grid_proxy = 25 - X_test['qualifying_position'].fillna(20.0).values
+    train_mean = float(np.mean(y_train))
+    train_median = float(np.median(y_train))
+    test_df['baseline_grid_proxy'] = grid_proxy
+    test_df['baseline_train_mean'] = train_mean
+    test_df['baseline_train_median'] = train_median
+    mae_grid_proxy = mean_absolute_error(y_test, grid_proxy)
+    mae_train_mean = mean_absolute_error(y_test, np.full(len(y_test), train_mean))
+    mae_train_median = mean_absolute_error(y_test, np.full(len(y_test), train_median))
+
     mae_ci = bootstrap_ci_by_race(test_df, target, 'pred_points', _mae_wrapper)
     rmse_ci = bootstrap_ci_by_race(test_df, target, 'pred_points', _rmse_wrapper)
-    
+
     metrics = {
         "MAE": float(mae),
         "MAE_CI": mae_ci,
@@ -134,7 +178,26 @@ def train_rf_model():
         "Spearman": float(spearman),
         "NDCG_5": float(ndcg5),
         "NDCG_10": float(ndcg10),
-        "baseline_MAE": float(mae_base)
+        "NDCG_aggregation": "macro-average across individual races",
+        "baseline_definition": {
+            "grid_position_proxy": "25 - qualifying_position; heuristic proxy, not a mean baseline",
+            "training_target_mean": "constant mean fantasy target calculated from train plus validation data",
+            "training_target_median": "constant median fantasy target calculated from train plus validation data"
+        },
+        "baselines": {
+            "grid_position_proxy_MAE": float(mae_grid_proxy),
+            "training_target_mean_MAE": float(mae_train_mean),
+            "training_target_median_MAE": float(mae_train_median),
+            "model_minus_grid_proxy_MAE_95pct_paired_race_bootstrap_CI": paired_race_bootstrap_delta(
+                test_df, target, 'pred_points', 'baseline_grid_proxy'
+            ),
+            "model_minus_training_mean_MAE_95pct_paired_race_bootstrap_CI": paired_race_bootstrap_delta(
+                test_df, target, 'pred_points', 'baseline_train_mean'
+            ),
+            "model_minus_training_median_MAE_95pct_paired_race_bootstrap_CI": paired_race_bootstrap_delta(
+                test_df, target, 'pred_points', 'baseline_train_median'
+            )
+        }
     }
     
     with open(f"{out_dir}/metrics.json", "w") as f:
@@ -162,7 +225,8 @@ def train_rf_model():
     
     # Model-vs-Baseline plot
     plt.figure()
-    plt.bar(['Model MAE', 'Baseline MAE'], [mae, mae_base])
+    plt.bar(['Random Forest', 'Grid proxy', 'Train mean', 'Train median'],
+            [mae, mae_grid_proxy, mae_train_mean, mae_train_median])
     plt.savefig(f"{plot_dir}/model_vs_baseline.png")
     plt.close()
     
@@ -197,7 +261,42 @@ def train_rf_model():
     }
     with open(f"{out_dir}/feature_schema.json", "w") as f:
         json.dump(feature_schema, f, indent=4)
-        
+
+    split_files = {}
+    for split_name, split_frame in (("train", train_df), ("val", val_df), ("test", test_df)):
+        split_path = f"data/processed/predictive/{split_name}_fantasy_final.csv"
+        with open(split_path, "rb") as split_file:
+            split_hash = hashlib.sha256(split_file.read()).hexdigest()
+        split_files[split_name] = {
+            "path": split_path,
+            "sha256": split_hash,
+            "rows": int(len(split_frame))
+        }
+    run_manifest = {
+        "run_id": run_id,
+        "random_seed": 42,
+        "training_rows_including_validation": int(len(train_val_df)),
+        "test_rows": int(len(test_df)),
+        "split_files": split_files,
+        "baseline_definitions": {
+            "grid_position_proxy": "25 - qualifying_position",
+            "training_target_mean": train_mean,
+            "training_target_median": train_median
+        },
+        "ranking_metric_aggregation": "macro-average of per-race NDCG",
+        "metrics_file": "metrics.json",
+        "predictions_file": "heldout_predictions.csv",
+        "model_file": "model.joblib"
+    }
+    with open(f"{out_dir}/run_manifest.json", "w") as f:
+        json.dump(run_manifest, f, indent=4)
+    for manifest_path in (
+        "data/processed/predictive/fantasy_split_manifest.json",
+        "data/manifests/predictive_dataset_manifest.json"
+    ):
+        if os.path.isfile(manifest_path):
+            shutil.copy2(manifest_path, out_dir)
+
     with open(f"{out_dir}/training_log.txt", "w") as f:
         f.write("Training Random Forest Fantasy Predictor...\n")
         f.write("Calculating permutation importance...\n")

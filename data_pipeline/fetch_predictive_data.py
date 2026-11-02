@@ -9,6 +9,7 @@ from datetime import datetime
 import psutil
 from fastf1.exceptions import RateLimitExceededError
 
+os.makedirs("data/cache", exist_ok=True)
 fastf1.Cache.enable_cache("data/cache")
 
 LOCK_FILE = "data/manifests/predictive_fetch.lock"
@@ -73,9 +74,18 @@ def is_manifest_valid(manifest_path):
     try:
         with open(manifest_path, 'r') as f:
             manifest = json.load(f)
-        # Reject the invalid completion manifest
+        # A manifest is not proof that the data files still exist. Raw data is
+        # intentionally gitignored, so validate every expected CSV before reuse.
         if manifest.get("status") in ("SUPERSEDED_INVALID",):
             return False
+        expected_files = manifest.get("expected_files", [])
+        if not expected_files:
+            return False
+        session_dir = os.path.dirname(manifest_path)
+        for name in expected_files:
+            data_path = os.path.join(session_dir, f"{name}.csv")
+            if not os.path.isfile(data_path) or os.path.getsize(data_path) == 0:
+                return False
         if 'results' not in manifest.get('row_counts', {}): return False
         if manifest['row_counts']['results'] <= 0: return False
         for file_name, file_hash in manifest.get('source_hashes', {}).items():
@@ -338,15 +348,28 @@ def fetch_all_data():
         try:
             with open(COMPLETE_FILE, 'r') as f:
                 manifest = json.load(f)
-            if manifest.get("status") == "SUPERSEDED_INVALID":
-                fetch_logger.log("Invalid completion manifest detected. Proceeding with fetch.")
+            # Completion metadata can outlive ignored raw files. Only skip the
+            # collection when at least one required session is still verifiably
+            # present; otherwise resume the normal per-session validation/refetch.
+            valid_required = 0
+            for root, _, files in os.walk("data/raw/predictive"):
+                if "completion_manifest.json" not in files:
+                    continue
+                manifest_path = os.path.join(root, "completion_manifest.json")
+                if is_manifest_valid(manifest_path):
+                    try:
+                        with open(manifest_path, "r") as session_file:
+                            session_meta = json.load(session_file)
+                        if session_meta.get("session") in ("R", "Q"):
+                            valid_required += 1
+                    except Exception:
+                        continue
+            if manifest.get("status") != "SUPERSEDED_INVALID" and valid_required > 0:
+                fetch_logger.log(f"Found {valid_required} validated required-session manifests; resuming per-session checks.")
             else:
-                fetch_logger.log("Fetch already completed (valid manifest found).")
-                fetch_logger.status["exit_status"] = "ALREADY_COMPLETE"
-                fetch_logger.save()
-                return
+                fetch_logger.log("Completion manifest exists but raw session data is missing or invalid; refetching.")
         except Exception:
-            pass
+            fetch_logger.log("Could not validate completion manifest; proceeding with fetch.")
 
     acquired, lock_data = acquire_lock()
     if not acquired:
