@@ -86,7 +86,7 @@ def write_fantasy_split_manifest(output_dir="data/processed/predictive"):
     if not manifest["no_race_overlap"]:
         raise RuntimeError("Fantasy race-level split leakage detected.")
     destination = root / "fantasy_split_manifest.json"
-    destination.write_text(json.dumps(manifest, indent=2) + "\\n", encoding="utf-8")
+    destination.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return manifest
 
 
