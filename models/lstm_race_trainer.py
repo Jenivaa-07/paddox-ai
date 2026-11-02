@@ -35,12 +35,12 @@ def expected_calibration_error(y_true, y_prob, n_bins=10):
     return ece
 
 def bootstrap_ci_by_race(df, true_col, pred_col, metric_fn, n_iterations=1000, ci=95):
-    """ Race-clustered bootstrap confidence interval """
+    """Deterministic race-clustered bootstrap confidence interval."""
     races = df[['season', 'round']].drop_duplicates()
     scores = []
     
-    for _ in range(n_iterations):
-        sample_races = races.sample(frac=1.0, replace=True)
+    for iteration in range(n_iterations):
+        sample_races = races.sample(frac=1.0, replace=True, random_state=42 + iteration)
         # Merge to get all rows for sampled races
         sample_df = sample_races.merge(df, on=['season', 'round'], how='left')
         if len(sample_df) > 0:
