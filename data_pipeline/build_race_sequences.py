@@ -160,14 +160,19 @@ def build_features(raw_dir, out_dir):
         how='left'
     )
     
-    # Split rules: Train: 2022-2024, Val: 2025, Test: 2026
+    # Split rules: Train: 2022-2024, Val: 2025, Test: 2026.
+    # Build masks independently for each frame: sequence rows and fantasy
+    # rows have different lengths and indices (multiple checkpoints per driver).
     train_cond = seq_df['season'].between(2022, 2024)
     val_cond = seq_df['season'] == 2025
     test_cond = seq_df['season'] == 2026
-    
-    # Check if 2025/2026 exist
-    has_val = seq_df[val_cond].shape[0] > 0
-    has_test = seq_df[test_cond].shape[0] > 0
+    fant_train_cond = fant_df['season'].between(2022, 2024)
+    fant_val_cond = fant_df['season'] == 2025
+    fant_test_cond = fant_df['season'] == 2026
+
+    # Check if 2025/2026 exist in both datasets before choosing fixed boundaries.
+    has_val = seq_df[val_cond].shape[0] > 0 and fant_df[fant_val_cond].shape[0] > 0
+    has_test = seq_df[test_cond].shape[0] > 0 and fant_df[fant_test_cond].shape[0] > 0
     
     if not has_val or not has_test:
         print("2025/2026 data unavailable. Falling back to chronological 70/15/15 race-level split.")
@@ -187,7 +192,9 @@ def build_features(raw_dir, out_dir):
         train_fant, val_fant, test_fant = apply_split(fant_df)
     else:
         train_seq, val_seq, test_seq = seq_df[train_cond], seq_df[val_cond], seq_df[test_cond]
-        train_fant, val_fant, test_fant = fant_df[train_cond], fant_df[val_cond], fant_df[test_cond]
+        train_fant = fant_df[fant_train_cond]
+        val_fant = fant_df[fant_val_cond]
+        test_fant = fant_df[fant_test_cond]
         
     os.makedirs(out_dir, exist_ok=True)
     
