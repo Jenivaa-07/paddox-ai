@@ -1,6 +1,8 @@
 name: PADDOX Research Reproducibility
 
 on:
+  push:
+    branches: [research/reproducibility-audit]
   workflow_dispatch:
     inputs:
       fetch_data:
