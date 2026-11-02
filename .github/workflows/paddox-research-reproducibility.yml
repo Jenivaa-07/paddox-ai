@@ -73,7 +73,7 @@ jobs:
         run: python -m compileall -q data_pipeline models scripts tests
 
       - name: Run metric and audit integrity tests
-        run: pytest -q tests/test_research_metrics.py
+        run: PYTHONPATH="$GITHUB_WORKSPACE" python -m pytest -q tests/test_research_metrics.py
 
       - name: Train LSTM race predictor
         run: python models/lstm_race_trainer.py
