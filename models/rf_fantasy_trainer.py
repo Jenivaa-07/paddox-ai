@@ -29,6 +29,11 @@ def ndcg_score_at_k(y_true, y_pred, k=5):
     y_pred = np.asarray(y_pred, dtype=float)
     if y_true.size == 0:
         return 0.0
+    # A one-driver race is a trivial ranking: its only ordering is perfect.
+    # Handle it before relevance shifting, which would otherwise make its
+    # sole relevance zero and produce an undefined (0/0) NDCG.
+    if y_true.size == 1:
+        return 1.0
     # PADDOX fantasy scoring can assign negative DNF/DSQ points. NDCG
     # requires non-negative relevance, so shift relevance within each race.
     y_true = y_true - np.min(y_true)
