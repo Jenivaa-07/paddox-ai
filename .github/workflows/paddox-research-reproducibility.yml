@@ -41,7 +41,9 @@ jobs:
       - name: Restore FastF1 cache
         uses: actions/cache@v4
         with:
-          path: data/cache
+          path: |
+            data/cache
+            data/raw/predictive
           key: fastf1-cache-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             fastf1-cache-${{ runner.os }}-
@@ -67,7 +69,10 @@ jobs:
           python data_pipeline/build_race_sequences.py
           python data_pipeline/build_fantasy_features.py
 
-      - name: Run metric unit tests
+      - name: Compile research Python modules
+        run: python -m compileall -q data_pipeline models scripts tests
+
+      - name: Run metric and audit integrity tests
         run: pytest -q tests/test_research_metrics.py
 
       - name: Train LSTM race predictor
