@@ -44,6 +44,28 @@ def race_ids(frame: pd.DataFrame) -> set[tuple[int, int]]:
     )
 
 
+def assert_predictions_match_test_races(frame: pd.DataFrame, split_info: dict[str, Any], label: str) -> dict[str, Any]:
+    """Reject predictions outside the held-out test races and report coverage."""
+    expected = set(split_info["splits"]["test"]["race_ids"])
+    observed = {f"{season}-{round_no}" for season, round_no in race_ids(frame)}
+    unexpected = sorted(observed - expected)
+    missing = sorted(expected - observed)
+    if unexpected:
+        raise ValueError(f"{label} predictions contain race IDs outside the test split: {unexpected}")
+    if not observed:
+        raise ValueError(f"{label} predictions contain no valid race IDs")
+    return {"test_split_races": len(expected), "prediction_races": len(observed),
+            "missing_test_races": missing, "all_predictions_within_test_split": True}
+
+
+def json_number(value: Any) -> float | None:
+    """Return a finite float, or null for undefined metrics."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if np.isfinite(number) else None
+
 def split_summary(path: Path, frame: pd.DataFrame) -> dict[str, Any]:
     races = sorted(race_ids(frame))
     summary: dict[str, Any] = {
@@ -144,6 +166,7 @@ def audit_lstm(run_id: str, split_info: dict[str, Any]) -> dict[str, Any]:
     if not path.is_file():
         raise FileNotFoundError(f"LSTM held-out predictions not found: {path}")
     frame = pd.read_csv(path)
+    coverage = assert_predictions_match_test_races(frame, split_info, "LSTM")
     required = {"final_position", "pred_position", "grid_position", "rolling_avg_finish", *RACE_KEYS}
     missing = required - set(frame.columns)
     if missing:
@@ -158,10 +181,11 @@ def audit_lstm(run_id: str, split_info: dict[str, Any]) -> dict[str, Any]:
         "predictions_sha256": sha256_file(path),
         "rows": int(len(frame)),
         "unique_races": int(frame.groupby(list(RACE_KEYS)).ngroups),
+        "test_split_coverage": coverage,
         "model": {
             "MAE": float(mean_absolute_error(frame.final_position, frame.pred_position)),
             "RMSE": float(np.sqrt(mean_squared_error(frame.final_position, frame.pred_position))),
-            "Spearman": float(spearmanr(frame.final_position, frame.pred_position).statistic),
+            "Spearman": json_number(spearmanr(frame.final_position, frame.pred_position).statistic),
         },
         "baselines": {},
     }
@@ -176,7 +200,7 @@ def audit_lstm(run_id: str, split_info: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def audit_fantasy(run_id: str) -> dict[str, Any]:
+def audit_fantasy(run_id: str, split_info: dict[str, Any]) -> dict[str, Any]:
     base = ROOT / "artifacts" / "predictive" / "rf_fantasy" / run_id
     path = base / "heldout_predictions.csv"
     train_path = ROOT / "data" / "processed" / "predictive" / "train_fantasy_final.csv"
@@ -186,6 +210,7 @@ def audit_fantasy(run_id: str) -> dict[str, Any]:
         raise FileNotFoundError(f"Fantasy training split not found: {train_path}")
 
     frame = pd.read_csv(path)
+    coverage = assert_predictions_match_test_races(frame, split_info, "Fantasy")
     train = pd.read_csv(train_path)
     val_path = ROOT / "data" / "processed" / "predictive" / "val_fantasy_final.csv"
     if not val_path.is_file():
@@ -221,11 +246,12 @@ def audit_fantasy(run_id: str) -> dict[str, Any]:
         "baseline_fit_pool": "train + validation (matches RF trainer)",
         "rows": int(len(frame)),
         "unique_races": int(frame.groupby(list(RACE_KEYS)).ngroups),
+        "test_split_coverage": coverage,
         "model": {
             "MAE": float(mean_absolute_error(frame[target], frame.pred_points)),
             "RMSE": float(np.sqrt(mean_squared_error(frame[target], frame.pred_points))),
             "R2": float(r2_score(frame[target], frame.pred_points)),
-            "Spearman": float(spearmanr(frame[target], frame.pred_points).statistic),
+            "Spearman": json_number(spearmanr(frame[target], frame.pred_points).statistic),
             "NDCG_global_5": ndcg_at_k(frame[target].to_numpy(), frame.pred_points.to_numpy(), 5),
             "NDCG_global_10": ndcg_at_k(frame[target].to_numpy(), frame.pred_points.to_numpy(), 10),
             "mean_race_NDCG_5": mean_race_ndcg(frame, target, "pred_points", 5),
@@ -266,7 +292,7 @@ def main() -> None:
     race_splits, race_info = load_splits("race_seq")
     fantasy_splits, fantasy_info = load_splits("fantasy_final")
     report: dict[str, Any] = {
-        "audit_version": 1,
+        "audit_version": 2,
         "note": "Recomputed from local split files and held-out predictions; no metrics are inferred or fabricated.",
         "race_dataset": race_info,
         "fantasy_dataset": fantasy_info,
@@ -280,7 +306,11 @@ def main() -> None:
     if args.lstm_run:
         report["lstm"] = audit_lstm(args.lstm_run, race_info)
     if args.fantasy_run:
-        report["fantasy"] = audit_fantasy(args.fantasy_run)
+        report["fantasy"] = audit_fantasy(args.fantasy_run, fantasy_info)
+
+    failed_checks = [name for name, passed in report["checks"].items() if passed is False]
+    if failed_checks:
+        raise ValueError(f"Dataset split integrity checks failed: {failed_checks}")
 
     output = ROOT / args.output
     output.parent.mkdir(parents=True, exist_ok=True)
