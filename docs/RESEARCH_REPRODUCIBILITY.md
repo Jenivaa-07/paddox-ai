@@ -66,9 +66,10 @@ A manual GitHub Actions workflow is available at
 
 1. Open **Actions → PADDOX Research Reproducibility**.
 2. Choose **Run workflow** and select `research/reproducibility-audit`.
-3. Set `fetch_data=true` only when the raw FastF1 files are not already present
-   in the runner cache/workspace. Fetching can take several hours and may be
-   interrupted by upstream rate limits.
+3. Set `fetch_data=true` for the first run or whenever raw FastF1 files are
+   missing. The workflow caches both `data/cache` and `data/raw/predictive`, so
+   later successful runs can restore the raw collection and use `fetch_data=false`.
+   Fetching can take several hours and may be interrupted by upstream rate limits.
 4. Download the `paddox-research-<run id>` artifact after the workflow finishes.
    It contains processed splits, model-run outputs, fetch logs, and the audit
    JSON when those files were successfully produced.
@@ -81,7 +82,8 @@ script validates existing session files and resumes missing/invalid sessions.
 
 ## Reproduction status
 
-The workflow and code changes are committed, but repository edits alone do not
+The workflow caches the raw predictive collection as well as FastF1's cache, and runs
+Python bytecode compilation before the focused metric/audit tests. Repository edits alone do not
 constitute an experiment run. Record the GitHub Actions run URL, run IDs,
 dataset hashes, and audit JSON before updating any paper results. Historical
 metrics must remain labelled as historical until independently reproduced.
