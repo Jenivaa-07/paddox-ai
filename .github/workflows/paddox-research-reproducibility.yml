@@ -47,6 +47,7 @@ jobs:
           key: fastf1-cache-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             fastf1-cache-${{ runner.os }}-
+          save-always: true
 
       - name: Fetch FastF1 data when requested
         if: inputs.fetch_data
@@ -73,7 +74,7 @@ jobs:
         run: python -m compileall -q data_pipeline models scripts tests
 
       - name: Run metric and audit integrity tests
-        run: pytest -q tests/test_research_metrics.py
+        run: PYTHONPATH="$GITHUB_WORKSPACE" python -m pytest -q tests/test_research_metrics.py
 
       - name: Train LSTM race predictor
         run: python models/lstm_race_trainer.py
@@ -97,6 +98,8 @@ jobs:
           if-no-files-found: warn
           retention-days: 90
           path: |
+            data/raw/predictive/
+            data/cache/
             data/processed/predictive/
             artifacts/predictive/lstm_race/
             artifacts/predictive/rf_fantasy/
