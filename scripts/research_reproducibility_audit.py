@@ -120,6 +120,8 @@ def clustered_bootstrap_delta(
 def ndcg_at_k(relevance: np.ndarray, scores: np.ndarray, k: int) -> float:
     if len(relevance) == 0:
         return 0.0
+    # PADDOX DNF/DSQ scoring can be negative; shift relevance within each race.
+    relevance = relevance - np.min(relevance)
     k = min(k, len(relevance))
     predicted_order = np.argsort(scores)[::-1][:k]
     ideal_order = np.argsort(relevance)[::-1][:k]
@@ -185,6 +187,11 @@ def audit_fantasy(run_id: str) -> dict[str, Any]:
 
     frame = pd.read_csv(path)
     train = pd.read_csv(train_path)
+    val_path = ROOT / "data" / "processed" / "predictive" / "val_fantasy_final.csv"
+    if not val_path.is_file():
+        raise FileNotFoundError(f"Fantasy validation split not found: {val_path}")
+    validation = pd.read_csv(val_path)
+    training_pool = pd.concat([train, validation], ignore_index=True)
     target = "fantasy_points_target"
     required = {target, "pred_points", "qualifying_position", *RACE_KEYS}
     missing = required - set(frame.columns)
@@ -195,8 +202,9 @@ def audit_fantasy(run_id: str) -> dict[str, Any]:
 
     # This is the exact proxy currently used by models/rf_fantasy_trainer.py.
     grid_proxy = 25 - frame["qualifying_position"].fillna(20.0)
-    train_mean = float(train[target].mean())
-    train_median = float(train[target].median())
+    # Match the trainer: Random Forest baselines are computed from train + val.
+    train_mean = float(training_pool[target].mean())
+    train_median = float(training_pool[target].median())
     frame = frame.assign(
         _grid_proxy=grid_proxy,
         _train_mean=train_mean,
@@ -208,6 +216,9 @@ def audit_fantasy(run_id: str) -> dict[str, Any]:
         "predictions_sha256": sha256_file(path),
         "training_split_file": str(train_path.relative_to(ROOT)),
         "training_split_sha256": sha256_file(train_path),
+        "validation_split_file": str(val_path.relative_to(ROOT)),
+        "validation_split_sha256": sha256_file(val_path),
+        "baseline_fit_pool": "train + validation (matches RF trainer)",
         "rows": int(len(frame)),
         "unique_races": int(frame.groupby(list(RACE_KEYS)).ngroups),
         "model": {
