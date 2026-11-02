@@ -241,7 +241,7 @@ def train_rf_model():
     plt.figure()
     sorted_idx = result.importances_mean.argsort()
     features = np.array(numeric_features + categorical_features)[sorted_idx]
-    plt.boxplot(result.importances[sorted_idx].T, vert=False, tick_labels=features)
+    plt.boxplot(result.importances[sorted_idx].T, vert=False, labels=features)
     plt.title("Permutation Importance")
     plt.savefig(f"{plot_dir}/permutation_importance.png")
     plt.close()
