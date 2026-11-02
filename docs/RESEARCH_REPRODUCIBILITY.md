@@ -43,7 +43,7 @@ python scripts/research_reproducibility_audit.py \
   --fantasy-run run_<new_fantasy_id>
 ```
 
-The script writes `reports/predictive/reproducibility_audit.json`. It fails closed if split overlap or strict chronological ordering checks fail, records exact split IDs and hashes, and verifies that every race represented in held-out predictions belongs to the test split (also reporting test-race coverage). It recomputes held-out metrics and distinguishes the grid proxy from training-mean and training-median baselines. Undefined Spearman values are serialized as JSON `null` rather than invalid `NaN` values.
+The script writes `reports/predictive/reproducibility_audit.json`. It fails closed if split overlap or strict chronological ordering checks fail, records exact split IDs and hashes, and requires exact race-level coverage of the held-out test split: it rejects both out-of-split predictions and missing test races. It recomputes held-out metrics and distinguishes the grid proxy from training-mean and training-median baselines. Undefined Spearman values are serialized as JSON `null` rather than invalid `NaN` values.
 
 ## Important manuscript rule
 
