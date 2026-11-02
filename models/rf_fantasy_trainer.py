@@ -29,6 +29,9 @@ def ndcg_score_at_k(y_true, y_pred, k=5):
     y_pred = np.asarray(y_pred, dtype=float)
     if y_true.size == 0:
         return 0.0
+    # PADDOX fantasy scoring can assign negative DNF/DSQ points. NDCG
+    # requires non-negative relevance, so shift relevance within each race.
+    y_true = y_true - np.min(y_true)
     k = min(int(k), y_true.size)
     discounts = np.log2(np.arange(2, k + 2))
     order = np.argsort(y_pred)[::-1][:k]
