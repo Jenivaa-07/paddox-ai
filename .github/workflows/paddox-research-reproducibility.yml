@@ -47,6 +47,7 @@ jobs:
           key: fastf1-cache-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             fastf1-cache-${{ runner.os }}-
+          save-always: true
 
       - name: Fetch FastF1 data when requested
         if: inputs.fetch_data
@@ -97,6 +98,8 @@ jobs:
           if-no-files-found: warn
           retention-days: 90
           path: |
+            data/raw/predictive/
+            data/cache/
             data/processed/predictive/
             artifacts/predictive/lstm_race/
             artifacts/predictive/rf_fantasy/
