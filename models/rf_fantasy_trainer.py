@@ -67,11 +67,12 @@ def paired_race_bootstrap_delta(df, true_col, model_col, baseline_col,
     return [float(np.percentile(deltas, 2.5)), float(np.percentile(deltas, 97.5))]
 
 def bootstrap_ci_by_race(df, true_col, pred_col, metric_fn, n_iterations=1000, ci=95):
+    """Deterministic race-clustered bootstrap confidence interval."""
     races = df[['season', 'round']].drop_duplicates()
     scores = []
     
-    for _ in range(n_iterations):
-        sample_races = races.sample(frac=1.0, replace=True)
+    for iteration in range(n_iterations):
+        sample_races = races.sample(frac=1.0, replace=True, random_state=42 + iteration)
         sample_df = sample_races.merge(df, on=['season', 'round'], how='left')
         if len(sample_df) > 0:
             score = metric_fn(sample_df[true_col].values, sample_df[pred_col].values)
