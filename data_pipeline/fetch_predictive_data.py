@@ -7,7 +7,7 @@ import fastf1
 import pandas as pd
 from datetime import datetime
 import psutil
-from fastf1.exceptions import RateLimitExceededError
+from fastf1.req import RateLimitExceededError
 
 fastf1.Cache.enable_cache("data/cache")
 
