@@ -1,6 +1,7 @@
 import os
 import glob
 import json
+import hashlib
 import pandas as pd
 import numpy as np
 
@@ -191,10 +192,48 @@ def build_features(raw_dir, out_dir):
     os.makedirs(out_dir, exist_ok=True)
     
     # Save sequences
-    train_seq.to_csv(f"{out_dir}/train_race_seq.csv", index=False)
-    val_seq.to_csv(f"{out_dir}/val_race_seq.csv", index=False)
-    test_seq.to_csv(f"{out_dir}/test_race_seq.csv", index=False)
-    
+    split_frames = {"train": train_seq, "val": val_seq, "test": test_seq}
+    split_manifest = {
+        "source": "FastF1-derived public race/session data",
+        "split_unit": "race (season, round)",
+        "split_strategy": "fixed season boundaries" if has_val and has_test else "chronological 70/15/15 race-level fallback",
+        "split_boundaries": (
+            {"train_seasons": "2022-2024", "validation_seasons": [2025], "test_seasons": [2026]}
+            if has_val and has_test else
+            {"strategy": "chronological ordered race list; integer cut points at 70% and 85%"}
+        ),
+        "random_seed": 42,
+        "splits": {}
+    }
+    for split_name, frame in split_frames.items():
+        path = f"{out_dir}/{split_name}_race_seq.csv"
+        frame.to_csv(path, index=False)
+        race_ids = sorted(
+            frame[["season", "round"]].drop_duplicates()
+            .astype(int).itertuples(index=False, name=None)
+        )
+        digest = hashlib.sha256(open(path, "rb").read()).hexdigest()
+        split_manifest["splits"][split_name] = {
+            "rows": int(len(frame)),
+            "unique_races": len(race_ids),
+            "race_ids": [f"{season}-{round_no}" for season, round_no in race_ids],
+            "sha256": digest
+        }
+
+    race_sets = {
+        name: set(frame[["season", "round"]].drop_duplicates().astype(int).itertuples(index=False, name=None))
+        for name, frame in split_frames.items()
+    }
+    split_manifest["no_race_overlap"] = not (
+        (race_sets["train"] & race_sets["val"])
+        or (race_sets["train"] & race_sets["test"])
+        or (race_sets["val"] & race_sets["test"])
+    )
+    if not split_manifest["no_race_overlap"]:
+        raise RuntimeError("Race-level split leakage detected: a race appears in multiple splits.")
+    with open(f"{out_dir}/race_split_manifest.json", "w") as manifest_file:
+        json.dump(split_manifest, manifest_file, indent=2)
+
     # Save raw fantasy before targets are built
     train_fant.to_csv(f"{out_dir}/train_fantasy_raw.csv", index=False)
     val_fant.to_csv(f"{out_dir}/val_fantasy_raw.csv", index=False)
