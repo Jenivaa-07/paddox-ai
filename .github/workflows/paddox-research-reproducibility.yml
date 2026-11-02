@@ -1,6 +1,8 @@
 name: PADDOX Research Reproducibility
 
 on:
+  push:
+    branches: [phase7-release]
   workflow_dispatch:
     inputs:
       fetch_data:
@@ -49,7 +51,7 @@ jobs:
             fastf1-cache-${{ runner.os }}-
 
       - name: Fetch FastF1 data when requested
-        if: inputs.fetch_data
+        if: github.event_name == 'push' || inputs.fetch_data
         run: python data_pipeline/fetch_predictive_data.py
 
       - name: Confirm raw race data exists
