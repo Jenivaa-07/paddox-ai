@@ -18,6 +18,9 @@ concurrency:
   group: paddox-research-reproducibility
   cancel-in-progress: false
 
+env:
+  PYTHONPATH: ${{ github.workspace }}
+
 jobs:
   reproduce:
     runs-on: ubuntu-latest
