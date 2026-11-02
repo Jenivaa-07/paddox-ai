@@ -56,3 +56,32 @@ pytest -q tests/test_research_metrics.py
 ```
 
 Run the full project test suite as well before merging this branch. This repository change was authored through GitHub file operations; a local Python environment was not available in this editing session, so the tests are not represented as executed or passed.
+
+
+## GitHub Actions reproduction run
+
+A manual GitHub Actions workflow is available at
+`.github/workflows/paddox-research-reproducibility.yml` on the
+`research/reproducibility-audit` branch.
+
+1. Open **Actions → PADDOX Research Reproducibility**.
+2. Choose **Run workflow** and select `research/reproducibility-audit`.
+3. Set `fetch_data=true` only when the raw FastF1 files are not already present
+   in the runner cache/workspace. Fetching can take several hours and may be
+   interrupted by upstream rate limits.
+4. Download the `paddox-research-<run id>` artifact after the workflow finishes.
+   It contains processed splits, model-run outputs, fetch logs, and the audit
+   JSON when those files were successfully produced.
+
+The workflow is deliberately manual: it does not run automatically on every
+commit and it does not modify the protected/release branch. A green workflow
+run is required before reporting newly reproduced metrics. If fetching is
+interrupted, inspect the fetch log and rerun with `fetch_data=true`; the fetch
+script validates existing session files and resumes missing/invalid sessions.
+
+## Reproduction status
+
+The workflow and code changes are committed, but repository edits alone do not
+constitute an experiment run. Record the GitHub Actions run URL, run IDs,
+dataset hashes, and audit JSON before updating any paper results. Historical
+metrics must remain labelled as historical until independently reproduced.
