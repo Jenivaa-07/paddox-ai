@@ -1,5 +1,7 @@
 import os
 import json
+import hashlib
+import shutil
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -255,7 +257,42 @@ def train_rf_model():
     }
     with open(f"{out_dir}/feature_schema.json", "w") as f:
         json.dump(feature_schema, f, indent=4)
-        
+
+    split_files = {}
+    for split_name, split_frame in (("train", train_df), ("val", val_df), ("test", test_df)):
+        split_path = f"data/processed/predictive/{split_name}_fantasy_final.csv"
+        with open(split_path, "rb") as split_file:
+            split_hash = hashlib.sha256(split_file.read()).hexdigest()
+        split_files[split_name] = {
+            "path": split_path,
+            "sha256": split_hash,
+            "rows": int(len(split_frame))
+        }
+    run_manifest = {
+        "run_id": run_id,
+        "random_seed": 42,
+        "training_rows_including_validation": int(len(train_val_df)),
+        "test_rows": int(len(test_df)),
+        "split_files": split_files,
+        "baseline_definitions": {
+            "grid_position_proxy": "25 - qualifying_position",
+            "training_target_mean": train_mean,
+            "training_target_median": train_median
+        },
+        "ranking_metric_aggregation": "macro-average of per-race NDCG",
+        "metrics_file": "metrics.json",
+        "predictions_file": "heldout_predictions.csv",
+        "model_file": "model.joblib"
+    }
+    with open(f"{out_dir}/run_manifest.json", "w") as f:
+        json.dump(run_manifest, f, indent=4)
+    for manifest_path in (
+        "data/processed/predictive/fantasy_split_manifest.json",
+        "data/manifests/predictive_dataset_manifest.json"
+    ):
+        if os.path.isfile(manifest_path):
+            shutil.copy2(manifest_path, out_dir)
+
     with open(f"{out_dir}/training_log.txt", "w") as f:
         f.write("Training Random Forest Fantasy Predictor...\n")
         f.write("Calculating permutation importance...\n")
