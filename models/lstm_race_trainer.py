@@ -1,5 +1,8 @@
 import os
 import json
+import random
+import hashlib
+import shutil
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -113,6 +116,12 @@ def load_data(split):
 
 def train_model():
     print("Training LSTM Race Predictor...")
+    seed = 42
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
     run_id = "run_" + os.urandom(4).hex()
     out_dir = f"artifacts/predictive/lstm_race/{run_id}"
     plot_dir = f"{out_dir}/plots"
@@ -149,7 +158,14 @@ def train_model():
     X_val, y_reg_val, y_cls_val = to_tensors(val_df, val_feat)
     X_test, y_reg_test, y_cls_test = to_tensors(test_df, test_feat)
     
-    train_loader = DataLoader(TensorDataset(X_train, y_reg_train, y_cls_train), batch_size=32, shuffle=True)
+    loader_generator = torch.Generator()
+    loader_generator.manual_seed(seed)
+    train_loader = DataLoader(
+        TensorDataset(X_train, y_reg_train, y_cls_train),
+        batch_size=32,
+        shuffle=True,
+        generator=loader_generator
+    )
     
     model = LSTMRacePredictor(input_dim=3, hidden_dim=64, num_layers=2)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
@@ -307,7 +323,40 @@ def train_model():
     }
     with open(f"{out_dir}/feature_schema.json", "w") as f:
         json.dump(feature_schema, f, indent=4)
-        
+
+    # Archive the exact inputs used for this run. This is essential for
+    # independently reproducing the paper's reported held-out metrics.
+    split_files = {}
+    for split_name in ("train", "val", "test"):
+        split_path = f"data/processed/predictive/{split_name}_race_seq.csv"
+        with open(split_path, "rb") as split_file:
+            split_hash = hashlib.sha256(split_file.read()).hexdigest()
+        split_files[split_name] = {
+            "path": split_path,
+            "sha256": split_hash,
+            "rows": int(len({"train": train_df, "val": val_df, "test": test_df}[split_name]))
+        }
+    run_manifest = {
+        "run_id": run_id,
+        "random_seed": seed,
+        "best_validation_loss": float(best_val_loss),
+        "classification_threshold_selected_on_validation": float(best_thresh),
+        "split_files": split_files,
+        "metrics_file": "metrics.json",
+        "predictions_file": "heldout_predictions.csv",
+        "model_file": "model.pt",
+        "model_config_file": "model_config.json",
+        "feature_schema_file": "feature_schema.json"
+    }
+    with open(f"{out_dir}/run_manifest.json", "w") as f:
+        json.dump(run_manifest, f, indent=4)
+    for manifest_path in (
+        "data/processed/predictive/race_split_manifest.json",
+        "data/manifests/predictive_dataset_manifest.json"
+    ):
+        if os.path.isfile(manifest_path):
+            shutil.copy2(manifest_path, out_dir)
+
     # Generate current_model.json
     with open("artifacts/predictive/lstm_race/current_model.json", "w") as f:
         json.dump({"run_id": run_id}, f)
