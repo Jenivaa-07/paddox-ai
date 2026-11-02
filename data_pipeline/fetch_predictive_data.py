@@ -9,6 +9,7 @@ from datetime import datetime
 import psutil
 from fastf1.req import RateLimitExceededError
 
+os.makedirs("data/cache", exist_ok=True)
 fastf1.Cache.enable_cache("data/cache")
 
 LOCK_FILE = "data/manifests/predictive_fetch.lock"
