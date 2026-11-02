@@ -54,8 +54,10 @@ def assert_predictions_match_test_races(frame: pd.DataFrame, split_info: dict[st
         raise ValueError(f"{label} predictions contain race IDs outside the test split: {unexpected}")
     if not observed:
         raise ValueError(f"{label} predictions contain no valid race IDs")
+    if missing:
+        raise ValueError(f"{label} predictions do not cover every held-out test race: {missing}")
     return {"test_split_races": len(expected), "prediction_races": len(observed),
-            "missing_test_races": missing, "all_predictions_within_test_split": True}
+            "missing_test_races": [], "all_predictions_within_test_split": True}
 
 
 def json_number(value: Any) -> float | None:
